@@ -1,0 +1,400 @@
+package com.wmspluriva.ui.components
+
+import android.content.Context
+import android.content.res.Configuration
+import android.util.TypedValue
+import android.view.View
+import android.widget.Button
+import android.widget.TextView
+import androidx.core.view.updateLayoutParams
+import androidx.core.view.updateMargins
+import androidx.fragment.app.Fragment
+import com.google.android.material.floatingactionbutton.FloatingActionButton
+import com.wmspluriva.utils.DeviceTypeManager
+
+// Componente UI adaptive pentru diferite tipuri de dispozitive
+object AdaptiveUIComponents {
+    
+    // Dimensiuni pentru diferite tipuri de dispozitive
+    data class DeviceDimensions(
+        val buttonHeight: Int,
+        val buttonMinWidth: Int,
+        val fabSize: Int,
+        val textSizePrimary: Float,
+        val textSizeSecondary: Float,
+        val paddingStandard: Int,
+        val marginStandard: Int,
+        val cardElevation: Float,
+        val iconSize: Int
+    )
+    
+    private fun getDimensionsForDevice(context: Context): DeviceDimensions {
+        val resources = context.resources
+        val deviceCategory = DeviceTypeManager.getDeviceCategory()
+        val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        
+        return when (deviceCategory) {
+            DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL -> {
+                // Dimensiuni optimizate pentru terminale Zebra (ecrane mici, dar vizibilitate bună)
+                DeviceDimensions(
+                    buttonHeight = resources.getDimensionPixelSize(R.dimen.button_height_zebra),
+                    buttonMinWidth = resources.getDimensionPixelSize(R.dimen.button_min_width_zebra),
+                    fabSize = if (isLandscape) 48 else 56,
+                    textSizePrimary = 16f,
+                    textSizeSecondary = 14f,
+                    paddingStandard = resources.getDimensionPixelSize(R.dimen.padding_zebra),
+                    marginStandard = resources.getDimensionPixelSize(R.dimen.margin_zebra),
+                    cardElevation = 2f,
+                    iconSize = 24
+                )
+            }
+            
+            DeviceTypeManager.DeviceCategory.ANDROID_PHONE -> {
+                // Dimensiuni standard pentru telefoane Android
+                DeviceDimensions(
+                    buttonHeight = resources.getDimensionPixelSize(R.dimen.button_height_phone),
+                    buttonMinWidth = resources.getDimensionPixelSize(R.dimen.button_min_width_phone),
+                    fabSize = 56,
+                    textSizePrimary = 18f,
+                    textSizeSecondary = 14f,
+                    paddingStandard = resources.getDimensionPixelSize(R.dimen.padding_phone),
+                    marginStandard = resources.getDimensionPixelSize(R.dimen.margin_phone),
+                    cardElevation = 4f,
+                    iconSize = 24
+                )
+            }
+            
+            DeviceTypeManager.DeviceCategory.ANDROID_TABLET -> {
+                // Dimensiuni pentru tablete (mai mult spațiu)
+                DeviceDimensions(
+                    buttonHeight = resources.getDimensionPixelSize(R.dimen.button_height_tablet),
+                    buttonMinWidth = resources.getDimensionPixelSize(R.dimen.button_min_width_tablet),
+                    fabSize = 64,
+                    textSizePrimary = 20f,
+                    textSizeSecondary = 16f,
+                    paddingStandard = resources.getDimensionPixelSize(R.dimen.padding_tablet),
+                    marginStandard = resources.getDimensionPixelSize(R.dimen.margin_tablet),
+                    cardElevation = 6f,
+                    iconSize = 28
+                )
+            }
+            
+            else -> {
+                // Dimensiuni default
+                DeviceDimensions(
+                    buttonHeight = 48.dpToPx(context),
+                    buttonMinWidth = 120.dpToPx(context),
+                    fabSize = 56,
+                    textSizePrimary = 18f,
+                    textSizeSecondary = 14f,
+                    paddingStandard = 16.dpToPx(context),
+                    marginStandard = 8.dpToPx(context),
+                    cardElevation = 4f,
+                    iconSize = 24
+                )
+            }
+        }
+    }
+    
+    // Aplică stiluri adaptive la butoane
+    fun adaptButton(button: Button, context: Context, isPrimary: Boolean = false) {
+        val dimensions = getDimensionsForDevice(context)
+        
+        button.apply {
+            minHeight = dimensions.buttonHeight
+            minWidth = dimensions.buttonMinWidth
+            
+            updateLayoutParams<android.view.ViewGroup.MarginLayoutParams> {
+                updateMargins(
+                    left = dimensions.marginStandard / 2,
+                    right = dimensions.marginStandard / 2,
+                    top = dimensions.marginStandard / 4,
+                    bottom = dimensions.marginStandard / 4
+                )
+            }
+            
+            setPadding(
+                dimensions.paddingStandard,
+                dimensions.paddingStandard / 2,
+                dimensions.paddingStandard,
+                dimensions.paddingStandard / 2
+            )
+            
+            setTextSize(
+                TypedValue.COMPLEX_UNIT_SP,
+                if (isPrimary) dimensions.textSizePrimary else dimensions.textSizeSecondary
+            )
+            
+            // Culori diferite pentru terminale Zebra (contrast mai bun)
+            if (DeviceTypeManager.getDeviceCategory() == DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL) {
+                if (isPrimary) {
+                    setBackgroundColor(android.graphics.Color.parseColor("#2196F3"))
+                    setTextColor(android.graphics.Color.WHITE)
+                } else {
+                    setBackgroundColor(android.graphics.Color.parseColor("#EEEEEE"))
+                    setTextColor(android.graphics.Color.parseColor("#333333"))
+                }
+            }
+        }
+    }
+    
+    // Adaptează FloatingActionButton
+    fun adaptFAB(fab: FloatingActionButton, context: Context) {
+        val dimensions = getDimensionsForDevice(context)
+        
+        fab.apply {
+            size = when {
+                dimensions.fabSize <= 48 -> FloatingActionButton.SIZE_MINI
+                dimensions.fabSize >= 64 -> FloatingActionButton.SIZE_NORMAL
+                else -> FloatingActionButton.SIZE_NORMAL
+            }
+            
+            updateLayoutParams<android.view.ViewGroup.MarginLayoutParams> {
+                updateMargins(
+                    right = dimensions.marginStandard,
+                    bottom = dimensions.marginStandard
+                )
+            }
+        }
+    }
+    
+    // Adaptează TextView-uri
+    fun adaptTextView(textView: TextView, context: Context, textType: TextType) {
+        val dimensions = getDimensionsForDevice(context)
+        
+        val textSize = when (textType) {
+            TextType.PRIMARY -> dimensions.textSizePrimary
+            TextType.SECONDARY -> dimensions.textSizeSecondary
+            TextType.CAPTION -> dimensions.textSizeSecondary - 2f
+            TextType.TITLE -> dimensions.textSizePrimary + 4f
+        }
+        
+        textView.apply {
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, textSize)
+            
+            setPadding(
+                dimensions.paddingStandard / 4,
+                dimensions.paddingStandard / 4,
+                dimensions.paddingStandard / 4,
+                dimensions.paddingStandard / 4
+            )
+            
+            // Pentru terminale Zebra, folosim culori cu contrast mai mare
+            if (DeviceTypeManager.getDeviceCategory() == DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL) {
+                when (textType) {
+                    TextType.PRIMARY -> setTextColor(android.graphics.Color.parseColor("#212121"))
+                    TextType.SECONDARY -> setTextColor(android.graphics.Color.parseColor("#424242"))
+                    TextType.CAPTION -> setTextColor(android.graphics.Color.parseColor("#757575"))
+                    TextType.TITLE -> {
+                        setTextColor(android.graphics.Color.parseColor("#1976D2"))
+                        typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    }
+                }
+            }
+        }
+    }
+    
+    // Adaptează CardView-uri
+    fun adaptCardView(cardView: androidx.cardview.widget.CardView, context: Context) {
+        val dimensions = getDimensionsForDevice(context)
+        
+        cardView.apply {
+            cardElevation = dimensions.cardElevation
+            radius = dimensions.paddingStandard / 2f
+            
+            updateLayoutParams<android.view.ViewGroup.MarginLayoutParams> {
+                updateMargins(
+                    left = dimensions.marginStandard,
+                    right = dimensions.marginStandard,
+                    top = dimensions.marginStandard / 2,
+                    bottom = dimensions.marginStandard / 2
+                )
+            }
+            
+            setContentPadding(
+                dimensions.paddingStandard,
+                dimensions.paddingStandard,
+                dimensions.paddingStandard,
+                dimensions.paddingStandard
+            )
+        }
+    }
+    
+    enum class TextType {
+        PRIMARY, SECONDARY, CAPTION, TITLE
+    }
+}
+
+// Extension functions pentru ușurința în utilizare
+fun Button.adaptForDevice(context: Context, isPrimary: Boolean = false) {
+    AdaptiveUIComponents.adaptButton(this, context, isPrimary)
+}
+
+fun TextView.adaptForDevice(context: Context, textType: AdaptiveUIComponents.TextType) {
+    AdaptiveUIComponents.adaptTextView(this, context, textType)
+}
+
+fun FloatingActionButton.adaptForDevice(context: Context) {
+    AdaptiveUIComponents.adaptFAB(this, context)
+}
+
+fun androidx.cardview.widget.CardView.adaptForDevice(context: Context) {
+    AdaptiveUIComponents.adaptCardView(this, context)
+}
+
+// Helper pentru conversii dp to px
+fun Int.dpToPx(context: Context): Int {
+    return TypedValue.applyDimension(
+        TypedValue.COMPLEX_UNIT_DIP,
+        this.toFloat(),
+        context.resources.displayMetrics
+    ).toInt()
+}
+
+// Configurare adaptivă pentru Fragment-uri
+fun Fragment.applyAdaptiveLayout() {
+    val deviceCategory = DeviceTypeManager.getDeviceCategory()
+    val isLandscape = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+    
+    when (deviceCategory) {
+        DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL -> {
+            // Pentru terminale Zebra, folosim layout-uri compacte
+            if (isLandscape) {
+                // În landscape pe terminal Zebra, optimizăm pentru vizualizare orizontală
+                applyZebraLandscapeOptimizations()
+            } else {
+                applyZebraPortraitOptimizations()
+            }
+        }
+        
+        DeviceTypeManager.DeviceCategory.ANDROID_PHONE -> {
+            // Pentru telefoane, layout standard
+            applyPhoneOptimizations(isLandscape)
+        }
+        
+        DeviceTypeManager.DeviceCategory.ANDROID_TABLET -> {
+            // Pentru tablete, profităm de spațiul extra
+            applyTabletOptimizations(isLandscape)
+        }
+        
+        else -> {
+            // Layout default
+        }
+    }
+}
+
+private fun Fragment.applyPhoneOptimizations(isLandscape: Boolean) {
+    // Optimizări pentru telefoane Android
+    view?.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerView)?.apply {
+        // În landscape pe telefon, folosim grid layout
+        if (isLandscape) {
+            layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, 2)
+        } else {
+            layoutManager = androidx.recyclerview.widget.LinearLayoutManager(context)
+        }
+    }
+    
+    // Ajustează mărimea textului pentru lizibilitate pe ecrane mici
+    view?.findViewById<TextView>(R.id.textTitle)?.apply {
+        adaptForDevice(requireContext(), AdaptiveUIComponents.TextType.TITLE)
+    }
+}
+
+private fun Fragment.applyTabletOptimizations(isLandscape: Boolean) {
+    // Pentru tablete, folosim spațiul extra pentru a afișa mai multe informații
+    view?.findViewById<androidx.recyclerview.widget.RecyclerView>(R.id.recyclerView)?.apply {
+        val spanCount = if (isLandscape) 3 else 2
+        layoutManager = androidx.recyclerview.widget.GridLayoutManager(context, spanCount)
+    }
+    
+    // Pe tablete, putem afișa panouri laterale sau bottom sheets mai mari
+    // Activăm master-detail flow dacă este disponibil
+}
+
+// Clasa pentru gestionarea layout-urilor adaptive
+class AdaptiveLayoutManager(private val context: Context) {
+    
+    fun getOptimalSpanCount(defaultSpanCount: Int): Int {
+        val deviceCategory = DeviceTypeManager.getDeviceCategory()
+        val isLandscape = context.resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        val screenWidth = context.resources.displayMetrics.widthPixels
+        
+        return when (deviceCategory) {
+            DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL -> {
+                // Terminale Zebra au ecrane mai mici, folosim mai puține coloane
+                if (isLandscape) 2 else 1
+            }
+            DeviceTypeManager.DeviceCategory.ANDROID_PHONE -> {
+                // Telefoane standard
+                if (screenWidth > 1080) { // Telefoane mari
+                    if (isLandscape) 3 else 2
+                } else { // Telefoane normale
+                    if (isLandscape) 2 else 1
+                }
+            }
+            DeviceTypeManager.DeviceCategory.ANDROID_TABLET -> {
+                // Tablete au mult spațiu
+                if (isLandscape) 4 else 3
+            }
+            else -> defaultSpanCount
+        }
+    }
+    
+    fun getOptimalItemHeight(): Int {
+        val deviceCategory = DeviceTypeManager.getDeviceCategory()
+        
+        return when (deviceCategory) {
+            DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL -> 80.dpToPx(context)
+            DeviceTypeManager.DeviceCategory.ANDROID_PHONE -> 72.dpToPx(context)
+            DeviceTypeManager.DeviceCategory.ANDROID_TABLET -> 96.dpToPx(context)
+            else -> 72.dpToPx(context)
+        }
+    }
+}
+
+// Configurare specifică pentru scanare pe diferite dispozitive
+object ScanUIAdapter {
+    
+    fun configureScanButton(button: Button, context: Context) {
+        val deviceCategory = DeviceTypeManager.getDeviceCategory()
+        
+        when (deviceCategory) {
+            DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL -> {
+                // Pe Zebra, butonul poate fi mai mic pentru că scanarea este hardware
+                button.text = "SCAN"
+                button.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_qr_code_scanner, 0, 0, 0)
+            }
+            else -> {
+                // Pe telefoane, butonul trebuie să fie mai proeminent
+                button.text = "Deschide Camera"
+                button.setCompoundDrawablesWithIntrinsicBounds(R.drawable.ic_camera, 0, 0, 0)
+            }
+        }
+        
+        button.adaptForDevice(context, isPrimary = true)
+    }
+    
+    fun configureManualInputOption(view: View, context: Context) {
+        val deviceCategory = DeviceTypeManager.getDeviceCategory()
+        
+        when (deviceCategory) {
+            DeviceTypeManager.DeviceCategory.ZEBRA_TERMINAL -> {
+                // Pe Zebra, introducerea manuală este mai rar folosită
+                view.visibility = View.GONE
+            }
+            else -> {
+                // Pe telefoane, este o opțiune importantă
+                view.visibility = View.VISIBLE
+            }
+        }
+    }
+}.applyZebraLandscapeOptimizations() {
+    // Ascunde elemente non-esențiale în landscape pe Zebra
+    // Mărește butoanele pentru accesibilitate cu degetul
+}
+
+private fun Fragment.applyZebraPortraitOptimizations() {
+    // Layout vertical compact pentru terminale Zebra
+}
+
+private fun Fragment
