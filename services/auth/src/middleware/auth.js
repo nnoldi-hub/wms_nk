@@ -1,45 +1,49 @@
 const jwt = require('jsonwebtoken');
 
-// Middleware to verify JWT token
-const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
+const JWT_SECRET = process.env.JWT_SECRET;
 
-  if (!token) {
-    return res.status(401).json({ error: 'Access token required' });
-  }
-
+// Authentication middleware
+exports.authenticate = (req, res, next) => {
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const authHeader = req.headers.authorization;
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return res.status(401).json({ error: 'No token provided' });
+    }
+
+    const token = authHeader.substring(7);
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    if (decoded.type === 'refresh') {
+      return res.status(401).json({ error: 'Invalid token type' });
+    }
+
     req.user = decoded;
     next();
   } catch (error) {
-    if (error instanceof jwt.TokenExpiredError) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ error: 'Invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
       return res.status(401).json({ error: 'Token expired' });
     }
-    return res.status(403).json({ error: 'Invalid token' });
+    req.logger?.error('Authentication error', error);
+    res.status(500).json({ error: 'Internal server error' });
   }
 };
 
-// Middleware to check user roles
-const authorizeRoles = (...roles) => {
+// Authorization middleware
+exports.authorize = (allowedRoles) => {
   return (req, res, next) => {
     if (!req.user) {
-      return res.status(401).json({ error: 'Authentication required' });
+      return res.status(401).json({ error: 'Unauthorized' });
     }
 
-    if (!roles.includes(req.user.role)) {
-      return res.status(403).json({ 
-        error: 'Access denied',
-        message: `This action requires one of these roles: ${roles.join(', ')}`
-      });
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Forbidden: Insufficient permissions' });
     }
 
     next();
   };
-};
-
-module.exports = {
-  authenticateToken,
-  authorizeRoles
 };

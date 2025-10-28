@@ -18,13 +18,13 @@ Service de autentificare și autorizare pentru sistemul WMS-NKS.
 - `POST /api/v1/auth/register` - Înregistrare utilizator nou
 - `POST /api/v1/auth/refresh` - Reîmprospătare access token
 - `POST /api/v1/auth/logout` - Logout
+- `GET /api/v1/auth/me` - Obține utilizatorul curent autentificat
 
 ### Users Management
-- `GET /api/v1/users` - Lista utilizatori (admin)
+- `GET /api/v1/users` - Lista utilizatori cu paginare (admin)
 - `GET /api/v1/users/:id` - Detalii utilizator
-- `PUT /api/v1/users/:id` - Actualizare utilizator (admin)
+- `PUT /api/v1/users/:id` - Actualizare utilizator
 - `DELETE /api/v1/users/:id` - Dezactivare utilizator (admin)
-- `POST /api/v1/users/:id/change-password` - Schimbare parolă
 
 ### System
 - `GET /health` - Health check
