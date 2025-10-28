@@ -1,0 +1,657 @@
+version: '3.9'
+
+services:
+  # =============================================================================
+  # INFRASTRUCTURE LAYER
+  # =============================================================================
+  
+  # PostgreSQL - Primary Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: wms-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wms_admin
+      POSTGRES_PASSWORD: wms_secure_pass_2025
+      POSTGRES_DB: wms_nks
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=en_US.UTF-8"
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/init-scripts:/docker-entrypoint-initdb.d
+    networks:
+      - wms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wms_admin -d wms_nks"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis - Cache & Session Store
+  redis:
+    image: redis:7-alpine
+    container_name: wms-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes --requirepass redis_pass_2025
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - wms-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "--raw", "incr", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # RabbitMQ - Message Queue
+  rabbitmq:
+    image: rabbitmq:3.12-management-alpine
+    container_name: wms-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: wms_queue
+      RABBITMQ_DEFAULT_PASS: queue_pass_2025
+      RABBITMQ_DEFAULT_VHOST: wms
+    ports:
+      - "5672:5672"   # AMQP
+      - "15672:15672" # Management UI
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    networks:
+      - wms-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # =============================================================================
+  # MONITORING & LOGGING LAYER
+  # =============================================================================
+
+  # Prometheus - Metrics Collection
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: wms-prometheus
+    restart: unless-stopped
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    networks:
+      - wms-network
+
+  # Grafana - Metrics Visualization
+  grafana:
+    image: grafana/grafana:latest
+    container_name: wms-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: grafana_admin_2025
+      GF_INSTALL_PLUGINS: grafana-clock-panel
+    ports:
+      - "3001:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+      - ./docker/grafana/provisioning:/etc/grafana/provisioning
+    networks:
+      - wms-network
+    depends_on:
+      - prometheus
+
+  # Loki - Log Aggregation
+  loki:
+    image: grafana/loki:latest
+    container_name: wms-loki
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./docker/loki/loki-config.yml:/etc/loki/local-config.yaml
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - wms-network
+
+  # Promtail - Log Shipper
+  promtail:
+    image: grafana/promtail:latest
+    container_name: wms-promtail
+    restart: unless-stopped
+    volumes:
+      - ./docker/promtail/promtail-config.yml:/etc/promtail/config.yml
+      - /var/log:/var/log
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    networks:
+      - wms-network
+    depends_on:
+      - loki
+
+  # =============================================================================
+  # API GATEWAY LAYER
+  # =============================================================================
+
+  # Kong Gateway - API Gateway
+  kong-database:
+    image: postgres:15-alpine
+    container_name: wms-kong-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kong
+      POSTGRES_PASSWORD: kong_pass_2025
+      POSTGRES_DB: kong
+    volumes:
+      - kong_data:/var/lib/postgresql/data
+    networks:
+      - wms-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U kong"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  kong-migration:
+    image: kong:3.4-alpine
+    container_name: wms-kong-migration
+    command: kong migrations bootstrap
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong_pass_2025
+      KONG_PG_DATABASE: kong
+    networks:
+      - wms-network
+    depends_on:
+      kong-database:
+        condition: service_healthy
+    restart: on-failure
+
+  kong:
+    image: kong:3.4-alpine
+    container_name: wms-kong
+    restart: unless-stopped
+    environment:
+      KONG_DATABASE: postgres
+      KONG_PG_HOST: kong-database
+      KONG_PG_USER: kong
+      KONG_PG_PASSWORD: kong_pass_2025
+      KONG_PG_DATABASE: kong
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_ERROR_LOG: /dev/stderr
+      KONG_ADMIN_LISTEN: 0.0.0.0:8001
+      KONG_PROXY_LISTEN: 0.0.0.0:8000
+    ports:
+      - "8000:8000"  # Proxy HTTP
+      - "8443:8443"  # Proxy HTTPS
+      - "8001:8001"  # Admin API
+      - "8444:8444"  # Admin API HTTPS
+    networks:
+      - wms-network
+    depends_on:
+      kong-database:
+        condition: service_healthy
+      kong-migration:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "kong", "health"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+
+  # Konga - Kong Admin UI
+  konga:
+    image: pantsel/konga:latest
+    container_name: wms-konga
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      DB_ADAPTER: postgres
+      DB_HOST: kong-database
+      DB_USER: kong
+      DB_PASSWORD: kong_pass_2025
+      DB_DATABASE: konga
+    ports:
+      - "1337:1337"
+    networks:
+      - wms-network
+    depends_on:
+      - kong-database
+
+  # =============================================================================
+  # APPLICATION SERVICES LAYER
+  # =============================================================================
+
+  # Auth Service
+  auth-service:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: wms-auth
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      JWT_SECRET: your_super_secret_jwt_key_change_in_production
+      JWT_EXPIRY: 15m
+      REFRESH_TOKEN_EXPIRY: 7d
+      LOG_LEVEL: debug
+    ports:
+      - "3010:3000"
+    volumes:
+      - ./services/auth:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Inventory Service
+  inventory-service:
+    build:
+      context: ./services/inventory
+      dockerfile: Dockerfile
+    container_name: wms-inventory
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      AUTH_SERVICE_URL: http://auth-service:3000
+      LOG_LEVEL: debug
+    ports:
+      - "3011:3000"
+    volumes:
+      - ./services/inventory:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      auth-service:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Scanner Service
+  scanner-service:
+    build:
+      context: ./services/scanner-service
+      dockerfile: Dockerfile
+    container_name: wms-scanner
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      INVENTORY_SERVICE_URL: http://inventory-service:3000
+      AUTH_SERVICE_URL: http://auth-service:3000
+      SYNC_BATCH_SIZE: 100
+      CONFLICT_STRATEGY: manual_review
+      LOG_LEVEL: debug
+    ports:
+      - "3012:3000"
+    volumes:
+      - ./services/scanner-service:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Cutting Service
+  cutting-service:
+    build:
+      context: ./services/cutting
+      dockerfile: Dockerfile
+    container_name: wms-cutting
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      INVENTORY_SERVICE_URL: http://inventory-service:3000
+      LOG_LEVEL: debug
+    ports:
+      - "3013:3000"
+    volumes:
+      - ./services/cutting:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Shipping Service
+  shipping-service:
+    build:
+      context: ./services/shipping
+      dockerfile: Dockerfile
+    container_name: wms-shipping
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      INVENTORY_SERVICE_URL: http://inventory-service:3000
+      LOG_LEVEL: debug
+    ports:
+      - "3014:3000"
+    volumes:
+      - ./services/shipping:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ERP Connector Service
+  erp-connector:
+    build:
+      context: ./services/erp_connector
+      dockerfile: Dockerfile
+    container_name: wms-erp-connector
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      PLURIVA_API_URL: https://api.pluriva.com/v1
+      PLURIVA_API_KEY: your_pluriva_api_key_here
+      SYNC_INTERVAL: 300000
+      RETRY_MAX_ATTEMPTS: 5
+      RETRY_BACKOFF_MS: 1000
+      LOG_LEVEL: debug
+    ports:
+      - "3015:3000"
+    volumes:
+      - ./services/erp_connector:/app
+      - /app/node_modules
+      - erp_data:/app/data
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Notifications Service
+  notifications-service:
+    build:
+      context: ./services/notifications
+      dockerfile: Dockerfile
+    container_name: wms-notifications
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      WEBSOCKET_PORT: 3001
+      FCM_SERVER_KEY: your_fcm_server_key_here
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 587
+      SMTP_USER: your_email@gmail.com
+      SMTP_PASS: your_email_password
+      LOG_LEVEL: debug
+    ports:
+      - "3016:3000"
+      - "3017:3001"
+    volumes:
+      - ./services/notifications:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Reports Service
+  reports-service:
+    build:
+      context: ./services/reports
+      dockerfile: Dockerfile
+    container_name: wms-reports
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      REPORTS_STORAGE_PATH: /app/reports
+      LOG_LEVEL: debug
+    ports:
+      - "3018:3000"
+    volumes:
+      - ./services/reports:/app
+      - /app/node_modules
+      - reports_data:/app/reports
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Scheduler Service
+  scheduler-service:
+    build:
+      context: ./services/scheduler
+      dockerfile: Dockerfile
+    container_name: wms-scheduler
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      LOG_LEVEL: debug
+    ports:
+      - "3019:3000"
+    volumes:
+      - ./services/scheduler:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # =============================================================================
+  # FRONTEND LAYER
+  # =============================================================================
+
+  # Web UI
+  web-ui:
+    build:
+      context: ./frontend/web_ui
+      dockerfile: Dockerfile
+    container_name: wms-web-ui
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      VITE_API_GATEWAY_URL: http://localhost:8000
+      VITE_WS_URL: ws://localhost:3017
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend/web_ui:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      - kong
+    command: npm run dev -- --host 0.0.0.0
+
+# =============================================================================
+# NETWORKS
+# =============================================================================
+networks:
+  wms-network:
+    driver: bridge
+    name: wms-nks-network
+
+# =============================================================================
+# VOLUMES
+# =============================================================================
+volumes:
+  postgres_data:
+    name: wms-postgres-data
+  redis_data:
+    name: wms-redis-data
+  rabbitmq_data:
+    name: wms-rabbitmq-data
+  kong_data:
+    name: wms-kong-data
+  prometheus_data:
+    name: wms-prometheus-data
+  grafana_data:
+    name: wms-grafana-data
+  loki_data:
+    name: wms-loki-data
+  erp_data:
+    name: wms-erp-data
+  reports_data:
+    name: wms-reports-data
