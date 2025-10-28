@@ -295,12 +295,14 @@ services:
       REDIS_PASSWORD: redis_pass_2025
       RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
       AUTH_SERVICE_URL: http://auth-service:3000
+      JWT_SECRET: your_super_secret_jwt_key_change_in_production
       LOG_LEVEL: debug
     ports:
       - "3011:3000"
-    volumes:
-      - ./services/inventory:/app
-      - /app/node_modules
+    # Volumes disabled in production - use docker cp for hot-reload during dev
+    # volumes:
+    #   - ./services/inventory:/app
+    #   - /app/node_modules
     networks:
       - wms-network
     depends_on:

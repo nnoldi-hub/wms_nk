@@ -1,12 +1,56 @@
 const express = require('express');
 const { Pool } = require('pg');
 const redis = require('redis');
+const winston = require('winston');
+const promClient = require('prom-client');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Winston logger
+const logger = winston.createLogger({
+  level: 'info',
+  format: winston.format.combine(
+    winston.format.timestamp(),
+    winston.format.json()
+  ),
+  transports: [
+    new winston.transports.Console(),
+  ],
+});
+
+// Prometheus metrics
+const register = new promClient.Registry();
+promClient.collectDefaultMetrics({ register });
+
+const httpRequestDuration = new promClient.Histogram({
+  name: 'http_request_duration_seconds',
+  help: 'Duration of HTTP requests in seconds',
+  labelNames: ['method', 'route', 'status_code'],
+  registers: [register]
+});
+
 // Middleware
 app.use(express.json());
+
+// Request logging middleware
+app.use((req, res, next) => {
+  const start = Date.now();
+  res.on('finish', () => {
+    const duration = Date.now() - start;
+    logger.info({
+      method: req.method,
+      url: req.url,
+      status: res.statusCode,
+      duration: `${duration}ms`
+    });
+    
+    httpRequestDuration
+      .labels(req.method, req.route?.path || req.url, res.statusCode)
+      .observe(duration / 1000);
+  });
+  next();
+});
 
 // PostgreSQL connection
 const pool = new Pool({
@@ -26,8 +70,20 @@ const redisClient = redis.createClient({
   password: process.env.REDIS_PASSWORD || 'redis_pass_2025',
 });
 
-redisClient.on('error', (err) => console.error('Redis Client Error', err));
+redisClient.on('error', (err) => logger.error('Redis Client Error', err));
+redisClient.on('connect', () => logger.info('Redis connected'));
 redisClient.connect();
+
+// Attach database, redis, and logger to request object
+app.use((req, res, next) => {
+  req.db = pool;
+  req.redis = redisClient;
+  req.logger = logger;
+  req.metrics = {
+    httpRequestDuration
+  };
+  next();
+});
 
 // Health check endpoint
 app.get('/health', async (req, res) => {
@@ -51,19 +107,31 @@ app.get('/health', async (req, res) => {
 });
 
 // Metrics endpoint
-app.get('/metrics', (req, res) => {
-  res.set('Content-Type', 'text/plain');
-  res.send(`
-# HELP inventory_uptime_seconds Uptime of the inventory service
-# TYPE inventory_uptime_seconds counter
-inventory_uptime_seconds ${process.uptime()}
-`);
+app.get('/metrics', async (req, res) => {
+  res.set('Content-Type', register.contentType);
+  res.send(await register.metrics());
 });
 
-// API endpoints
+// Import routes
+const productsRoutes = require('./routes/products');
+const locationsRoutes = require('./routes/locations');
+const movementsRoutes = require('./routes/movements');
+
+// API routes
+app.use('/api/v1/products', productsRoutes);
+app.use('/api/v1/locations', locationsRoutes);
+app.use('/api/v1/movements', movementsRoutes);
+
+// Legacy compatibility endpoint
 app.get('/api/v1/inventory', async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM inventory_items LIMIT 100');
+    const result = await pool.query(`
+      SELECT ii.*, p.sku, p.name as product_name, l.name as location_name
+      FROM inventory_items ii
+      JOIN products p ON ii.product_id = p.id
+      JOIN locations l ON ii.location_id = l.id
+      LIMIT 100
+    `);
     res.json({
       success: true,
       data: result.rows,
@@ -77,54 +145,30 @@ app.get('/api/v1/inventory', async (req, res) => {
   }
 });
 
-app.get('/api/v1/inventory/sku/:sku', async (req, res) => {
-  try {
-    const { sku } = req.params;
-    const result = await pool.query(
-      'SELECT * FROM inventory_items WHERE sku = $1',
-      [sku]
-    );
-    
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: 'SKU not found',
-      });
-    }
-    
-    res.json({
-      success: true,
-      data: result.rows[0],
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
+// Error handling middleware
+app.use((err, req, res, next) => {
+  logger.error('Unhandled error:', err);
+  res.status(500).json({
+    success: false,
+    error: 'Internal server error',
+    message: process.env.NODE_ENV === 'development' ? err.message : undefined
+  });
 });
 
-app.get('/api/v1/inventory/locations', async (req, res) => {
-  try {
-    const result = await pool.query('SELECT * FROM locations ORDER BY name');
-    res.json({
-      success: true,
-      data: result.rows,
-      count: result.rowCount,
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message,
-    });
-  }
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    error: 'Route not found'
+  });
 });
 
 // Start server
 app.listen(PORT, () => {
-  console.log(`Inventory Service running on port ${PORT}`);
-  console.log(`Health check: http://localhost:${PORT}/health`);
-  console.log(`Metrics: http://localhost:${PORT}/metrics`);
+  logger.info(`Inventory Service running on port ${PORT}`);
+  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  logger.info(`Health check: http://localhost:${PORT}/health`);
+  logger.info(`Metrics: http://localhost:${PORT}/metrics`);
 });
 
 // Graceful shutdown
