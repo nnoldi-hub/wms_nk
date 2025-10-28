@@ -1,0 +1,8 @@
+# Auth Service Environment Variables
+
+node_modules/
+*.log
+.env
+.DS_Store
+coverage/
+dist/
