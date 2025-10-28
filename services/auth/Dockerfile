@@ -4,13 +4,13 @@ WORKDIR /app
 
 # Install dependencies
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install --production
 
 # Copy source code
 COPY . .
 
 # Install dev dependencies for development
-RUN npm install --only=development
+RUN npm install
 
 # Expose port
 EXPOSE 3000

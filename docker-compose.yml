@@ -162,7 +162,7 @@ services:
       retries: 5
 
   kong-migration:
-    image: kong:3.4-alpine
+    image: kong:3.8
     container_name: wms-kong-migration
     command: kong migrations bootstrap
     environment:
@@ -179,7 +179,7 @@ services:
     restart: on-failure
 
   kong:
-    image: kong:3.4-alpine
+    image: kong:3.8
     container_name: wms-kong
     restart: unless-stopped
     environment:
