@@ -7,6 +7,6 @@ RUN npm ci --only=production
 
 COPY src ./src
 
-EXPOSE 3017
+EXPOSE 3015
 
 CMD ["node", "src/app.js"]

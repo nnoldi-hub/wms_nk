@@ -367,25 +367,27 @@ services:
   # Cutting Service
   cutting-service:
     build:
-      context: ./services/cutting
+      context: ./services/cutting-service
       dockerfile: Dockerfile
     container_name: wms-cutting
     restart: unless-stopped
     environment:
       NODE_ENV: development
-      PORT: 3000
+      PORT: 3014
       DB_HOST: postgres
       DB_PORT: 5432
       DB_NAME: wms_nks
       DB_USER: wms_admin
       DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
       RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
       INVENTORY_SERVICE_URL: http://inventory-service:3000
       LOG_LEVEL: debug
     ports:
-      - "3013:3000"
+      - "3013:3014"
     volumes:
-      - ./services/cutting:/app
+      - ./services/cutting-service:/app
       - /app/node_modules
     networks:
       - wms-network
@@ -395,7 +397,122 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Sewing Service
+  sewing-service:
+    build:
+      context: ./services/sewing-service
+      dockerfile: Dockerfile
+    container_name: wms-sewing
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3014
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      CUTTING_SERVICE_URL: http://cutting-service:3014
+      LOG_LEVEL: debug
+    ports:
+      - "3014:3014"
+    volumes:
+      - ./services/sewing-service:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3014/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Quality Control Service
+  qc-service:
+    build:
+      context: ./services/quality-control-service
+      dockerfile: Dockerfile
+    container_name: wms-qc
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3015
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      SEWING_SERVICE_URL: http://sewing-service:3014
+      LOG_LEVEL: debug
+    ports:
+      - "3015:3015"
+    volumes:
+      - ./services/quality-control-service:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3015/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Shipments Service
+  shipments-service:
+    build:
+      context: ./services/shipments-service
+      dockerfile: Dockerfile
+    container_name: wms-shipments
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3016
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
+      INVENTORY_SERVICE_URL: http://inventory-service:3000
+      QC_SERVICE_URL: http://qc-service:3015
+      LOG_LEVEL: debug
+    ports:
+      - "3016:3016"
+    volumes:
+      - ./services/shipments-service:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3016/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -485,29 +602,22 @@ services:
   # Notifications Service
   notifications-service:
     build:
-      context: ./services/notifications
+      context: ./services/notifications-service
       dockerfile: Dockerfile
     container_name: wms-notifications
     restart: unless-stopped
     environment:
       NODE_ENV: development
-      PORT: 3000
+      PORT: 3017
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      REDIS_PASSWORD: redis_pass_2025
       RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
-      WEBSOCKET_PORT: 3001
-      FCM_SERVER_KEY: your_fcm_server_key_here
-      SMTP_HOST: smtp.gmail.com
-      SMTP_PORT: 587
-      SMTP_USER: your_email@gmail.com
-      SMTP_PASS: your_email_password
+      JWT_SECRET: wms_jwt_secret_key_2025_super_secure
       LOG_LEVEL: debug
     ports:
-      - "3016:3000"
-      - "3017:3001"
+      - "3017:3017"
     volumes:
-      - ./services/notifications:/app
+      - ./services/notifications-service:/app
       - /app/node_modules
     networks:
       - wms-network
@@ -517,7 +627,7 @@ services:
       rabbitmq:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:3017/health"]
       interval: 30s
       timeout: 10s
       retries: 3
