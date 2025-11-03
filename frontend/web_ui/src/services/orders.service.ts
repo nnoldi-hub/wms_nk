@@ -33,7 +33,7 @@ const INVENTORY_API = 'http://localhost:3011/api/v1';
 
 const client = axios.create({ baseURL: INVENTORY_API });
 client.interceptors.request.use((config) => {
-  const token = localStorage.getItem('token');
+  const token = localStorage.getItem('accessToken');
   if (token) {
     const headers = (config.headers ?? {}) as Record<string, string>;
     headers.Authorization = `Bearer ${token}`;
