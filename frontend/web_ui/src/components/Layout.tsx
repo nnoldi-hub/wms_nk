@@ -14,6 +14,7 @@ import TransformIcon from '@mui/icons-material/Transform';
 import MenuIcon from '@mui/icons-material/Menu';
 import SettingsApplicationsIcon from '@mui/icons-material/SettingsApplications';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
+import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
 import { useAuth } from '../hooks/useAuth';
 
 const drawerWidth = 260;
@@ -27,6 +28,7 @@ const menuItems = [
   { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan' },
   { text: 'Setare Inițială', icon: <SettingsApplicationsIcon />, path: '/initial-setup' },
   { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config' },
+  { text: 'Pick Jobs', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs' },
   { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting' },
   { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing' },
   { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc' },

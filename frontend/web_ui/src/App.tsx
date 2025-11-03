@@ -19,6 +19,7 @@ import { InitialSetupPage } from './pages/InitialSetupPage';
 import { ShipmentsPage } from './pages/ShipmentsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WarehouseConfigPage } from './pages/WarehouseConfigPage';
+import PickJobsPage from './pages/PickJobsPage';
 import theme from './theme';
 
 function App() {
@@ -165,6 +166,16 @@ function App() {
                 <ProtectedRoute>
                   <Layout>
                     <WarehouseConfigPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/pick-jobs"
+              element={
+                <ProtectedRoute>
+                  <Layout>
+                    <PickJobsPage />
                   </Layout>
                 </ProtectedRoute>
               }
