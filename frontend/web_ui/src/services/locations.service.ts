@@ -1,4 +1,4 @@
-import axios from 'axios';
+import apiClient from './api';
 
 const INVENTORY_API = 'http://localhost:3011';
 
@@ -14,7 +14,7 @@ class LocationsService {
   async getAll(isActive: 'true' | 'false' | 'all' = 'true'): Promise<Location[]> {
     const params = new URLSearchParams();
     params.append('is_active', isActive);
-    const res = await axios.get(`${INVENTORY_API}/api/v1/locations?${params.toString()}`);
+    const res = await apiClient.get(`${INVENTORY_API}/api/v1/locations?${params.toString()}`);
     return res.data?.data ?? res.data;
   }
 }

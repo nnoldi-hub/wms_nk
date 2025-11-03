@@ -1,4 +1,4 @@
-import axios from 'axios';
+import apiClient from './api';
 
 const INVENTORY_API = 'http://localhost:3011';
 
@@ -80,27 +80,27 @@ class TransformationService {
     params.append('limit', limit.toString());
     params.append('offset', offset.toString());
 
-    const response = await axios.get(`${INVENTORY_API}/api/v1/transformations?${params}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/transformations?${params}`);
     return response.data.data || response.data;
   }
 
   async getById(id: string): Promise<Transformation> {
-    const response = await axios.get(`${INVENTORY_API}/api/v1/transformations/${id}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/transformations/${id}`);
     return response.data.data || response.data;
   }
 
   async create(transformation: CreateTransformationDto): Promise<Transformation> {
-    const response = await axios.post(`${INVENTORY_API}/api/v1/transformations`, transformation);
+    const response = await apiClient.post(`${INVENTORY_API}/api/v1/transformations`, transformation);
     return response.data.data || response.data;
   }
 
   async getStatistics(): Promise<TransformationStatistics> {
-    const response = await axios.get(`${INVENTORY_API}/api/v1/transformations/statistics`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/transformations/statistics`);
     return response.data.data || response.data;
   }
 
   async getTransformationTree(batchId: string): Promise<TransformationTreeNode> {
-    const response = await axios.get(`${INVENTORY_API}/api/v1/transformations/tree/${batchId}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/transformations/tree/${batchId}`);
     return response.data.data || response.data;
   }
 
@@ -109,7 +109,7 @@ class TransformationService {
   }
 
   async setResult(id: string, resultBatchId: string, resultQuantity: number, notes?: string): Promise<Transformation> {
-    const response = await axios.put(`${INVENTORY_API}/api/v1/transformations/${id}/result`, {
+    const response = await apiClient.put(`${INVENTORY_API}/api/v1/transformations/${id}/result`, {
       result_batch_id: resultBatchId,
       result_quantity: resultQuantity,
       notes,

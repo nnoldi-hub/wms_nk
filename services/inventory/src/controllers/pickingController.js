@@ -43,7 +43,7 @@ module.exports = {
       for (const ln of lines.rows) {
         const itemRes = await client.query(
           `INSERT INTO picking_job_items (job_id, line_id, product_sku, requested_qty, uom, lot_label, status)
-           VALUES ($1,$2,$3,COALESCE($4,0),$5,$6,'PENDING') RETURNING id`,
+           VALUES ($1,$2,$3,COALESCE($4::numeric, 0.0),$5,$6,'PENDING') RETURNING id`,
           [job.id, ln.id, ln.product_sku, ln.requested_qty, ln.uom || 'm', ln.lot_label || null]
         );
         const jobItemId = itemRes.rows[0].id;
@@ -78,7 +78,13 @@ module.exports = {
       const itemsCount = await req.db.query('SELECT COUNT(*)::int AS c FROM picking_job_items WHERE job_id = $1', [job.id]);
       return res.status(201).json({ success: true, data: { job, items_count: itemsCount.rows[0].c } });
     } catch (e) {
-      await client.query('ROLLBACK');
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      // Emit detailed server-side log to help diagnose 500s
+      console.error('[allocateFromOrder] Error allocating picking job:', {
+        orderId: req.params?.id,
+        error: e?.message,
+        stack: e?.stack
+      });
       return res.status(500).json({ success: false, message: e.message });
     } finally {
       client.release();
@@ -168,7 +174,8 @@ module.exports = {
       const j = await client.query('SELECT * FROM picking_jobs WHERE id = $1 FOR UPDATE', [id]);
       if (j.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Job not found' }); }
       const job = j.rows[0];
-      if (!['ASSIGNED', 'IN_PROGRESS'].includes(job.status)) {
+      // Allow picking also from NEW to support multi-picker without header assignment
+      if (!['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(job.status)) {
         await client.query('ROLLBACK');
         return res.status(409).json({ success: false, message: `Cannot pick on job with status ${job.status}` });
       }
@@ -190,13 +197,28 @@ module.exports = {
         item = r.rows.find(x => Number(x.requested_qty) > Number(x.picked_qty)) || r.rows[0];
       }
 
+      // Enforce/auto-assign item to current user for multi-picker workflow
+      const userId = getUserId(req);
+      if (!userId) { await client.query('ROLLBACK'); return res.status(400).json({ success: false, message: 'Missing user identity' }); }
+      if (item.assigned_to && item.assigned_to !== userId) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ success: false, message: `Item assigned to ${item.assigned_to}` });
+      }
+      if (!item.assigned_to) {
+        await client.query('UPDATE picking_job_items SET assigned_to=$1, assigned_at=now() WHERE id=$2', [userId, item.id]);
+        item.assigned_to = userId; // keep local state consistent
+      }
+
       const remaining = Number(item.requested_qty) - Number(item.picked_qty);
       const add = Math.min(remaining, q);
       const newPicked = Number(item.picked_qty) + add;
-      const newStatus = newPicked >= Number(item.requested_qty) ? 'DONE' : 'PARTIAL';
+      let newStatus = newPicked >= Number(item.requested_qty) ? 'DONE' : 'PARTIAL';
+      if (item.status === 'PENDING') {
+        newStatus = newPicked >= Number(item.requested_qty) ? 'DONE' : 'ASSIGNED';
+      }
 
       const upd = await client.query(
-        `UPDATE picking_job_items SET picked_qty=$1, status=$2 WHERE id=$3 RETURNING *`,
+        `UPDATE picking_job_items SET picked_qty=$1, status=$2, started_at=COALESCE(started_at, now()), completed_at=CASE WHEN $2='DONE' THEN now() ELSE completed_at END WHERE id=$3 RETURNING *`,
         [newPicked, newStatus, item.id]
       );
 
@@ -236,7 +258,7 @@ module.exports = {
       }
 
       // If job was ASSIGNED, move to IN_PROGRESS on first pick
-      if (job.status === 'ASSIGNED') {
+      if (['NEW','ASSIGNED'].includes(job.status)) {
         await client.query(`UPDATE picking_jobs SET status='IN_PROGRESS', started_at=now() WHERE id=$1`, [id]);
       }
 
@@ -285,6 +307,65 @@ module.exports = {
     }
   }
   ,
+  // Accept a specific job item (per-line assignment)
+  async acceptJobItem(req, res) {
+    const client = await req.db.connect();
+    try {
+      const { id, itemId } = req.params;
+      const userId = getUserId(req);
+      if (!userId) return res.status(400).json({ success: false, message: 'Missing user identity' });
+      await client.query('BEGIN');
+      const j = await client.query('SELECT id, status FROM picking_jobs WHERE id=$1', [id]);
+      if (j.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Job not found' }); }
+      const r = await client.query('SELECT * FROM picking_job_items WHERE id=$1 AND job_id=$2 FOR UPDATE', [itemId, id]);
+      if (r.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Job item not found' }); }
+      const item = r.rows[0];
+      if (item.assigned_to && item.assigned_to !== userId) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, message: `Item already assigned to ${item.assigned_to}` });
+      }
+      const upd = await client.query(
+        `UPDATE picking_job_items SET assigned_to=$1, assigned_at=now(), status=CASE WHEN status='PENDING' THEN 'ASSIGNED' ELSE status END WHERE id=$2 RETURNING *`,
+        [userId, itemId]
+      );
+      await client.query('COMMIT');
+      return res.json({ success: true, data: upd.rows[0] });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ success: false, message: e.message });
+    } finally {
+      client.release();
+    }
+  },
+
+  // Release an item assignment (optional)
+  async releaseJobItem(req, res) {
+    const client = await req.db.connect();
+    try {
+      const { id, itemId } = req.params;
+      const userId = getUserId(req);
+      if (!userId) return res.status(400).json({ success: false, message: 'Missing user identity' });
+      await client.query('BEGIN');
+      const r = await client.query('SELECT * FROM picking_job_items WHERE id=$1 AND job_id=$2 FOR UPDATE', [itemId, id]);
+      if (r.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Job item not found' }); }
+      const item = r.rows[0];
+      if (item.assigned_to && item.assigned_to !== userId) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ success: false, message: `Item assigned to ${item.assigned_to}` });
+      }
+      const upd = await client.query(
+        `UPDATE picking_job_items SET assigned_to=NULL, assigned_at=NULL, started_at=NULL WHERE id=$1 RETURNING *`,
+        [itemId]
+      );
+      await client.query('COMMIT');
+      return res.json({ success: true, data: upd.rows[0] });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ success: false, message: e.message });
+    } finally {
+      client.release();
+    }
+  },
   // Labels PDF for picked items (with QR)
   async labelsPdf(req, res) {
     try {
@@ -310,7 +391,7 @@ module.exports = {
       for (let idx = 0; idx < items.length; idx++) {
         const it = items[idx];
         const picked = Number(it.picked_qty) || 0;
-        if (picked <= 0) return;
+        if (picked <= 0) { continue; }
         if (y + labelHeight > doc.page.height - doc.page.margins.bottom) {
           doc.addPage();
           x = doc.x; y = doc.y; col = 0;
@@ -346,6 +427,108 @@ module.exports = {
         }
       }
       doc.end();
+    } catch (e) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  },
+
+  // Labels PDF for reservations (pre-pick labels)
+  async labelsReservedPdf(req, res) {
+    try {
+      const { id } = req.params; // job id
+      const j = await req.db.query('SELECT * FROM picking_jobs WHERE id = $1', [id]);
+      if (j.rowCount === 0) return res.status(404).json({ success: false, message: 'Job not found' });
+      const job = j.rows[0];
+      // Get reservations with remaining qty (reserved_qty > 0)
+      const r = await req.db.query(
+        `SELECT r.id, r.product_sku, r.reserved_qty, r.uom, ii.lot_number
+         FROM inventory_reservations r
+         LEFT JOIN inventory_items ii ON ii.id = r.inventory_item_id
+         WHERE r.job_id = $1 AND r.reserved_qty > 0
+         ORDER BY r.created_at ASC`,
+        [id]
+      );
+      const items = r.rows;
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename=${job.number}_reserved_labels.pdf`);
+      const doc = new PDFDocument({ size: 'A4', margin: 36 });
+      doc.pipe(res);
+
+      doc.fontSize(14).text(`Etichete rezervări job ${job.number}`, { align: 'left' });
+      doc.moveDown(0.5);
+      const labelWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right) / 2 - 10;
+      const labelHeight = 110;
+      let x = doc.x;
+      let y = doc.y;
+      let col = 0;
+      for (let idx = 0; idx < items.length; idx++) {
+        const it = items[idx];
+        const qty = Number(it.reserved_qty) || 0;
+        if (qty <= 0) { continue; }
+        if (y + labelHeight > doc.page.height - doc.page.margins.bottom) {
+          doc.addPage();
+          x = doc.x; y = doc.y; col = 0;
+        }
+        doc.rect(x, y, labelWidth, labelHeight).stroke();
+        const pad = 6;
+        const textAreaWidth = labelWidth - 90 - 2 * pad;
+        doc.fontSize(12).text(`SKU: ${it.product_sku}`, x + pad, y + pad, { width: textAreaWidth });
+        doc.fontSize(10).text(`Cant. rezervată: ${qty} ${it.uom || ''}`, { width: textAreaWidth });
+        if (it.lot_number) doc.text(`Lot: ${it.lot_number}`, { width: textAreaWidth });
+        doc.text(`Job: ${job.number}`, { width: textAreaWidth });
+        doc.fontSize(9).fillColor('#555').text(`RSV-${idx + 1}`, { width: textAreaWidth });
+        doc.fillColor('#000');
+
+        const qrPayload = JSON.stringify({ t: 'PICK_RSV', sku: it.product_sku, qty, uom: it.uom || null, lot: it.lot_number || null, job: job.number });
+        try {
+          const qrPng = await QRCode.toBuffer(qrPayload, { type: 'png', margin: 0, width: 80, errorCorrectionLevel: 'M' });
+          doc.image(qrPng, x + labelWidth - pad - 80, y + pad, { width: 80, height: 80 });
+        } catch (err) {
+          doc.rect(x + labelWidth - pad - 80, y + pad, 80, 80).stroke('#999');
+          doc.fontSize(8).fillColor('#999').text('QR ERR', x + labelWidth - pad - 80, y + pad + 30, { width: 80, align: 'center' });
+          doc.fillColor('#000');
+        }
+
+        col++;
+        if (col % 2 === 0) {
+          x = doc.x; y += labelHeight + 10; col = 0;
+        } else {
+          x += labelWidth + 20;
+        }
+      }
+      doc.end();
+    } catch (e) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  },
+
+  // List items, supports mine=1, status, pagination
+  async listItems(req, res) {
+    try {
+      const { mine, status, page = 1, limit = 50 } = req.query;
+      const params = [];
+      let where = [];
+      if (mine === '1' || mine === 'true') {
+        const userId = getUserId(req);
+        if (!userId) return res.status(400).json({ success: false, message: 'Missing user identity' });
+        params.push(userId); where.push(`pji.assigned_to = $${params.length}`);
+      }
+      if (status) { params.push(status); where.push(`pji.status = $${params.length}`); }
+      const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
+      const offset = (Number(page) - 1) * Number(limit);
+      const total = await req.db.query(`SELECT COUNT(*)::int AS c FROM picking_job_items pji ${whereSql}`, params);
+      params.push(limit, offset);
+      const rows = await req.db.query(
+        `SELECT pji.*, pj.number AS job_number, pj.id AS job_id
+         FROM picking_job_items pji
+         JOIN picking_jobs pj ON pj.id = pji.job_id
+         ${whereSql}
+         ORDER BY pji.updated_at DESC
+         LIMIT $${params.length - 1} OFFSET $${params.length}`,
+        params
+      );
+      return res.json({ success: true, data: rows.rows, pagination: { page: Number(page), limit: Number(limit), total: total.rows[0].c } });
     } catch (e) {
       return res.status(500).json({ success: false, message: e.message });
     }

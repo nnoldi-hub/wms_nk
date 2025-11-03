@@ -4,7 +4,7 @@
 -- inventory_reservations: reserved quantities for items to prevent double allocation
 
 CREATE TABLE IF NOT EXISTS picking_jobs (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   order_id UUID NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
   number TEXT NOT NULL, -- e.g., PJ_<seq>
   status TEXT NOT NULL DEFAULT 'NEW', -- NEW, ASSIGNED, IN_PROGRESS, COMPLETED, CANCELLED
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS picking_jobs (
 );
 
 CREATE TABLE IF NOT EXISTS picking_job_items (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   job_id UUID NOT NULL REFERENCES picking_jobs(id) ON DELETE CASCADE,
   line_id UUID REFERENCES sales_order_lines(id) ON DELETE SET NULL,
   product_sku TEXT NOT NULL REFERENCES products(sku) ON UPDATE CASCADE,
@@ -34,7 +34,7 @@ CREATE TABLE IF NOT EXISTS picking_job_items (
 );
 
 CREATE TABLE IF NOT EXISTS inventory_reservations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   order_id UUID NOT NULL REFERENCES sales_orders(id) ON DELETE CASCADE,
   line_id UUID REFERENCES sales_order_lines(id) ON DELETE SET NULL,
   job_id UUID REFERENCES picking_jobs(id) ON DELETE CASCADE,

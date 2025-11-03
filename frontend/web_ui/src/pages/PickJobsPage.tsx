@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Box, Button, Snackbar, Alert, Tooltip, IconButton, ToggleButtonGroup, ToggleButton, Typography } from '@mui/material';
+import { Box, Button, Snackbar, Alert, Tooltip, IconButton, ToggleButtonGroup, ToggleButton, Typography, Dialog, DialogTitle, DialogContent, DialogActions, Table, TableHead, TableRow, TableCell, TableBody } from '@mui/material';
 import { DataGrid, type GridColDef, type GridPaginationModel, type GridRowsProp } from '@mui/x-data-grid';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
+import QrCodeIcon from '@mui/icons-material/QrCode';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -17,6 +18,8 @@ export const PickJobsPage = () => {
   const [filter, setFilter] = useState<'all' | 'mine' | 'new'>('all');
   const [openDetails, setOpenDetails] = useState(false);
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
+  const [openMyItems, setOpenMyItems] = useState(false);
+  const [myItems, setMyItems] = useState<Array<{ id: string; job_id: string; job_number: string; product_sku: string; lot_label?: string; uom?: string; requested_qty: number; picked_qty: number; status: string; assigned_to?: string | null }>>([]);
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -34,6 +37,15 @@ export const PickJobsPage = () => {
       setSnackbar({ open: true, message: 'Nu am putut încărca joburile', severity: 'error' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const loadMyItems = async () => {
+    try {
+      const res = await pickingService.listMyItems({ limit: 100 });
+      setMyItems(res.data || []);
+    } catch {
+      // ignore
     }
   };
 
@@ -72,7 +84,7 @@ export const PickJobsPage = () => {
     { field: 'started_at', headerName: 'Start', width: 180 },
     { field: 'completed_at', headerName: 'Finalizat', width: 180 },
     {
-      field: 'actions', headerName: 'Acțiuni', width: 180, sortable: false, renderCell: (params) => (
+      field: 'actions', headerName: 'Acțiuni', width: 220, sortable: false, renderCell: (params) => (
         <Box>
           <Tooltip title="Detalii">
             <IconButton size="small" onClick={() => { setSelectedJobId(params.row.id as string); setOpenDetails(true); }}>
@@ -84,6 +96,11 @@ export const PickJobsPage = () => {
               <QrCode2Icon />
             </IconButton>
           </Tooltip>
+            <Tooltip title="Etichete (rezervări)">
+              <IconButton size="small" onClick={() => pickingService.openReservedLabels(params.row.id as string)}>
+                <QrCodeIcon />
+              </IconButton>
+            </Tooltip>
           <Tooltip title="Acceptă">
             <span>
               <IconButton size="small" onClick={() => handleAccept(params.row.id as string)} disabled={params.row.status !== 'NEW'}>
@@ -112,7 +129,10 @@ export const PickJobsPage = () => {
           <ToggleButton value="mine">Ale mele</ToggleButton>
           <ToggleButton value="new">Noi</ToggleButton>
         </ToggleButtonGroup>
-        <Button variant="outlined" onClick={fetchJobs}>Reîncarcă</Button>
+        <Box display="flex" gap={1}>
+          <Button variant="outlined" onClick={fetchJobs}>Reîncarcă</Button>
+          <Button variant="outlined" onClick={() => { setOpenMyItems(true); loadMyItems(); }}>Liniile mele</Button>
+        </Box>
       </Box>
 
       <Box sx={{ height: 600, width: '100%' }}>
@@ -133,6 +153,42 @@ export const PickJobsPage = () => {
         <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
       </Snackbar>
       <PickJobDetailsDialog open={openDetails} jobId={selectedJobId} onClose={() => setOpenDetails(false)} onChanged={fetchJobs} />
+
+      <Dialog open={openMyItems} onClose={() => setOpenMyItems(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>Liniile mele</DialogTitle>
+        <DialogContent>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Job</TableCell>
+                <TableCell>SKU</TableCell>
+                <TableCell>Lot</TableCell>
+                <TableCell>UM</TableCell>
+                <TableCell align="right">Solicitat</TableCell>
+                <TableCell align="right">Cules</TableCell>
+                <TableCell>Status</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {myItems.map((it) => (
+                <TableRow key={it.id}>
+                  <TableCell>{it.job_number}</TableCell>
+                  <TableCell>{it.product_sku}</TableCell>
+                  <TableCell>{it.lot_label || ''}</TableCell>
+                  <TableCell>{it.uom || ''}</TableCell>
+                  <TableCell align="right">{it.requested_qty}</TableCell>
+                  <TableCell align="right">{it.picked_qty}</TableCell>
+                  <TableCell>{it.status}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => loadMyItems()}>Reîncarcă</Button>
+          <Button variant="contained" onClick={() => setOpenMyItems(false)}>Închide</Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 };

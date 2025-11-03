@@ -1,10 +1,11 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useContext } from 'react';
 import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typography, Table, TableHead, TableRow, TableCell, TableBody, LinearProgress, Stack, IconButton, Tooltip } from '@mui/material';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import GppMaybeIcon from '@mui/icons-material/GppMaybe';
-import { pickingService, type PickJob } from '../services/picking.service';
+import { pickingService, type PickJob, type PickJobItem } from '../services/picking.service';
+import { AuthContext } from '../contexts/AuthContextShared';
 
 interface Props {
   open: boolean;
@@ -16,8 +17,10 @@ interface Props {
 export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props) => {
   const [loading, setLoading] = useState(false);
   const [job, setJob] = useState<PickJob | null>(null);
-  const [items, setItems] = useState<Array<{ id: string; product_sku: string; requested_qty: number; picked_qty: number; status: string; uom?: string; lot_label?: string }>>([]);
+  const [items, setItems] = useState<PickJobItem[]>([]);
   const [busy, setBusy] = useState(false);
+  const auth = useContext(AuthContext);
+  const currentUser = auth?.user?.username || auth?.user?.email || String(auth?.user?.id || '');
 
   const load = useCallback(async () => {
     if (!open || !jobId) return;
@@ -58,6 +61,28 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
     }
   };
 
+  const handleAcceptItem = async (itemId: string) => {
+    if (!jobId) return;
+    setBusy(true);
+    try {
+      await pickingService.acceptItem(jobId, itemId);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleReleaseItem = async (itemId: string) => {
+    if (!jobId) return;
+    setBusy(true);
+    try {
+      await pickingService.releaseItem(jobId, itemId);
+      await load();
+    } finally {
+      setBusy(false);
+    }
+  };
+
   return (
     <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>Pick Job {job?.number} ({job?.status})</DialogTitle>
@@ -80,6 +105,7 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
               <TableCell align="right">Solicitat</TableCell>
               <TableCell align="right">Cules</TableCell>
               <TableCell>Status</TableCell>
+              <TableCell>Asignat</TableCell>
               <TableCell>Acțiuni</TableCell>
             </TableRow>
           </TableHead>
@@ -92,7 +118,19 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
                 <TableCell align="right">{it.requested_qty}</TableCell>
                 <TableCell align="right">{it.picked_qty || 0}</TableCell>
                 <TableCell>{it.status}</TableCell>
+                <TableCell>{it.assigned_to || '-'}</TableCell>
                 <TableCell>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <Tooltip title="Acceptă linie">
+                      <span>
+                        <Button size="small" variant="outlined" onClick={() => handleAcceptItem(it.id)} disabled={busy || !!it.assigned_to && it.assigned_to !== currentUser}>Acceptă</Button>
+                      </span>
+                    </Tooltip>
+                    <Tooltip title="Eliberează linie">
+                      <span>
+                        <Button size="small" onClick={() => handleReleaseItem(it.id)} disabled={busy || !it.assigned_to || it.assigned_to !== currentUser}>Eliberează</Button>
+                      </span>
+                    </Tooltip>
                   <Tooltip title="+1 pick">
                     <span>
                       <IconButton size="small" onClick={() => handlePickOne(it.id)} disabled={busy || (it.picked_qty ?? 0) >= it.requested_qty}>
@@ -100,6 +138,7 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
                       </IconButton>
                     </span>
                   </Tooltip>
+                  </Stack>
                 </TableCell>
               </TableRow>
             ))}

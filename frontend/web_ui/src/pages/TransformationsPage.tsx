@@ -17,7 +17,7 @@ import {
   Link,
   TextField,
 } from '@mui/material';
-import { DataGrid, type GridColDef } from '@mui/x-data-grid';
+import { DataGrid, type GridColDef, type GridRenderCellParams } from '@mui/x-data-grid';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { transformationService, type Transformation, type TransformationStatistics } from '../services/transformation.service';
 import { productsService } from '../services/products.service';
@@ -106,13 +106,18 @@ export const TransformationsPage = () => {
       field: 'transformation_type',
       headerName: 'Type',
       width: 120,
-      renderCell: (params) => (
-        <Chip 
-          label={params.value} 
-          color={getTypeColor(params.value)}
-          size="small"
-        />
-      ),
+      renderCell: (params: GridRenderCellParams) => {
+        type TrRow = Transformation & { type?: string };
+        const row = params.row as TrRow;
+        const typeVal = (params.value as string) ?? row?.type ?? '-';
+        return (
+          <Chip
+            label={typeVal}
+            color={getTypeColor(typeVal)}
+            size="small"
+          />
+        );
+      },
     },
     {
       field: 'source_batch_number',
@@ -124,13 +129,37 @@ export const TransformationsPage = () => {
         </Link>
       ),
     },
-    { field: 'source_product_sku', headerName: 'Source Product', width: 150 },
-    { 
-      field: 'source_quantity_used', 
-      headerName: 'Quantity Used', 
-      width: 120, 
+    {
+      field: 'source_product_sku',
+      headerName: 'Source Product',
+      width: 150,
+      renderCell: (params: GridRenderCellParams) => {
+        type TrRow = Transformation & { source_product?: string };
+        const row = params.row as TrRow;
+        return (params.value as string) ?? row?.source_product ?? '-';
+      },
+    },
+    {
+      field: 'source_quantity_used',
+      headerName: 'Quantity Used',
+      width: 120,
       type: 'number',
-      valueFormatter: (value: number) => value ? value.toFixed(2) : '-',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueGetter: (params: unknown) => {
+        type TrRow = Transformation & { source_quantity?: number; source_quantity_used?: number };
+        if (typeof params !== 'object' || params === null) return null;
+        const row = (params as { row?: TrRow }).row;
+        if (!row) return null;
+        return row?.source_quantity_used ?? row?.source_quantity ?? null;
+      },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueFormatter: (params: unknown) => {
+        const raw = typeof params === 'object' && params !== null && 'value' in params
+          ? (params as { value?: unknown }).value
+          : params;
+        const v = Number(raw as unknown as number);
+        return Number.isFinite(v) ? v.toFixed(2) : '-';
+      },
     },
     {
       field: 'result_batch_number',
@@ -146,26 +175,64 @@ export const TransformationsPage = () => {
         </Button>
       ),
     },
-    { 
-      field: 'result_quantity', 
-      headerName: 'Result Quantity', 
-      width: 120, 
+    {
+      field: 'result_quantity',
+      headerName: 'Result Quantity',
+      width: 120,
       type: 'number',
-      valueFormatter: (value: number) => value ? value.toFixed(2) : '-',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueGetter: (params: unknown) => {
+        if (typeof params !== 'object' || params === null) return null;
+        const row = (params as { row?: Transformation }).row;
+        if (!row) return null;
+        return row?.result_quantity ?? null;
+      },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueFormatter: (params: unknown) => {
+        const raw = typeof params === 'object' && params !== null && 'value' in params
+          ? (params as { value?: unknown }).value
+          : params;
+        const v = Number(raw as unknown as number);
+        return Number.isFinite(v) ? v.toFixed(2) : '-';
+      },
     },
     {
       field: 'waste_percent',
       headerName: 'Waste %',
       width: 100,
       type: 'number',
-      valueFormatter: (value: number) => value ? `${value.toFixed(2)}%` : '-',
-      renderCell: (params) => {
-        const value = params.value;
-        if (!value) return '-';
-        const color = value > 50 ? 'error' : value > 20 ? 'warning' : 'success';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueGetter: (params: unknown) => {
+        type TrRow = Transformation & { source_quantity?: number; source_quantity_used?: number; waste_percent?: number };
+        if (typeof params !== 'object' || params === null) return null;
+        const row = (params as { row?: TrRow }).row;
+        if (!row) return null;
+        // Try direct waste_percent or compute from quantities if available
+        if (row?.waste_percent != null) return row.waste_percent as number;
+        const src = Number(row?.source_quantity_used ?? row?.source_quantity);
+        const res = Number(row?.result_quantity);
+        if (Number.isFinite(src) && Number.isFinite(res) && src > 0) {
+          return ((src - res) / src) * 100;
+        }
+        return null;
+      },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueFormatter: (params: unknown) => {
+        const raw = typeof params === 'object' && params !== null && 'value' in params
+          ? (params as { value?: unknown }).value
+          : params;
+        const v = Number(raw as unknown as number);
+        return Number.isFinite(v) ? `${v.toFixed(2)}%` : '-';
+      },
+      renderCell: (params: GridRenderCellParams) => {
+        type TrRow = Transformation & { waste_percent?: number };
+        const row = params.row as TrRow;
+        const v = Number((params.value as unknown as number) ?? row?.waste_percent);
+        if (!Number.isFinite(v)) return '-';
+        const color = v > 50 ? 'error' : v > 20 ? 'warning' : 'success';
         return (
-          <Chip 
-            label={`${value.toFixed(1)}%`} 
+          <Chip
+            label={`${v.toFixed(1)}%`}
             color={color}
             size="small"
           />
@@ -176,7 +243,22 @@ export const TransformationsPage = () => {
       field: 'created_at',
       headerName: 'Created At',
       width: 160,
-      valueFormatter: (value) => value ? new Date(value).toLocaleString() : '-',
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueGetter: (params: unknown) => {
+        type TrRow = Transformation & { performed_at?: string };
+        if (typeof params !== 'object' || params === null) return null;
+        const row = (params as { row?: TrRow }).row;
+        if (!row) return null;
+        return row?.created_at ?? row?.performed_at ?? null;
+      },
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      valueFormatter: (params: unknown) => {
+        const raw = typeof params === 'object' && params !== null && 'value' in params
+          ? (params as { value?: unknown }).value
+          : params;
+        const val = (raw as string | undefined) ?? undefined;
+        return val ? new Date(val).toLocaleString() : '-';
+      },
     },
   ];
 

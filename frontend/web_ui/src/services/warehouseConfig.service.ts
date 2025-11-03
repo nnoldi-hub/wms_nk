@@ -44,13 +44,23 @@ export const warehouseConfigService = {
     const { data } = await wcClient.get('/api/v1/warehouses', { params });
     return data;
   },
+  // Back-compat aliases
+  async getWarehouses(params?: Record<string, unknown>) {
+    return this.listWarehouses(params);
+  },
   async listZones(warehouseId: string, params?: Record<string, unknown>) {
     const { data } = await wcClient.get(`/api/v1/warehouses/${warehouseId}/zones`, { params });
     return data;
   },
+  async getZones(warehouseId: string, params?: Record<string, unknown>) {
+    return this.listZones(warehouseId, params);
+  },
   async listLocations(zoneId: string, params?: Record<string, unknown>) {
     const { data } = await wcClient.get(`/api/v1/zones/${zoneId}/locations`, { params });
     return data;
+  },
+  async getLocations(zoneId: string, params?: Record<string, unknown>) {
+    return this.listLocations(zoneId, params);
   },
   async deleteLocation(locationId: string) {
     const { data } = await wcClient.delete(`/api/v1/locations/${locationId}`);

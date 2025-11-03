@@ -5,7 +5,7 @@
 
 ---
 
-## 🔔 Latest Session: Orders & Picking Workflow (Nov 3, 2025)
+## 🔔 Latest Session: Orders & Picking Workflow + Transformări Stabilization (Nov 3, 2025)
 
 ### 🎯 What we shipped
 - Fixed product listing cap by implementing server-side pagination for products (no more 50-items limit)
@@ -30,15 +30,43 @@
 - Web UI
   - Orders page: new action “Generează job de culegere” calling allocate API with toasts
   - Order details dialog: Print/Download/Refresh pick-note
+  - Pick Jobs: per-item Accept/Release, +1 Pick, labels for picked items, and “Etichete (rezervări)” for pre-pick reserved labels
+  - New “Liniile mele” dialog to list items assigned to current user (mine)
+  - Transformări page stabilized: robust valueGetters/Formatters, backend field fallbacks, and authenticated API usage; no more console crashes
 - Mobile app (Expo)
   - Jobs list (mine/new/all), accept job, per-line “+1 pick”, complete job
   - API client for list/get/accept/pick/complete
 - Kong Gateway
   - Routes added/extended for `/api/v1/orders` and `/api/v1/pick-jobs` to inventory service
 
+### ➕ Enhancements & Fixes (Nov 3, later)
+- Multi-picker per item: each pick line can be accepted/released independently; enforced ownership on pick; timestamps for assigned/started/completed
+- Pre-pick reserved labels: `/pick-jobs/:id/labels-reserved.pdf` + UI button to print reserved labels before pick
+- “Liniile mele” quick view: `GET /api/v1/pick-items?mine=1` lists my assigned lines across jobs
+- Transformări page
+  - Fixed runtime crashes (Grid valueGetter/valueFormatter guards) and aligned field names (type/source_product vs transformation_type/source_product_sku)
+  - Switched services to use shared authenticated API client (Authorization Bearer + refresh)
+  - Confirmed inventory transformations endpoints operational:
+    - GET `/api/v1/transformations`
+    - GET `/api/v1/transformations/statistics`
+    - GET `/api/v1/transformations/tree/:batch_id`
+    - POST `/api/v1/transformations`
+    - PUT `/api/v1/transformations/:id/result`
+
+### 🐛 Bugs fixed
+- Frontend auth header: use `accessToken` key (fixed 401 on protected routes)
+- Allocation 500 error: cast issue on numeric ("invalid input syntax for type integer: '2.169'") fixed by coercing requested_qty to numeric
+- UUID defaults on picking tables corrected to `uuid_generate_v4()`; migrations applied
+
+### 🗃️ Migrations (recent)
+- 017_create_sales_orders.sql
+- 018_create_picking_jobs.sql
+- 019_fix_picking_uuid_defaults.sql
+- 020_enable_multi_picker_per_item.sql
+
 ### 🧪 Quality gates (delta)
 - Build: PASS (inventory service rebuilt successfully)
-- Lint/Typecheck: PASS (web/mobile changes compile clean)
+- Lint/Typecheck: PASS (web/mobile changes compile clean; Transformări page stabilized)
 - Runtime health: PASS (inventory health shows DB + Redis connected)
 - Gateway config: WARN – configure script showed intermittent admin connectivity; re-run `scripts/configure-kong.ps1` when Kong Admin is reachable
 

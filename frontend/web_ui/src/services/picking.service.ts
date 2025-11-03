@@ -12,6 +12,20 @@ export interface PickJob {
   created_at?: string;
 }
 
+export interface PickJobItem {
+  id: string;
+  product_sku: string;
+  requested_qty: number;
+  picked_qty: number;
+  status: string;
+  uom?: string;
+  lot_label?: string;
+  assigned_to?: string | null;
+  assigned_at?: string | null;
+  started_at?: string | null;
+  completed_at?: string | null;
+}
+
 const INVENTORY_API = 'http://localhost:3011/api/v1';
 
 const client = axios.create({ baseURL: INVENTORY_API });
@@ -40,7 +54,7 @@ class PickingService {
 
   async getJob(id: string) {
     const response = await client.get(`/pick-jobs/${id}`);
-    return response.data as { success: boolean; data: { job: PickJob; items: Array<{ id: string; product_sku: string; requested_qty: number; picked_qty: number; status: string; uom?: string; lot_label?: string }> } };
+    return response.data as { success: boolean; data: { job: PickJob; items: PickJobItem[] } };
   }
 
   async pick(id: string, payload: { item_id?: string; sku?: string; qty: number; lot_label?: string }) {
@@ -50,6 +64,16 @@ class PickingService {
 
   async accept(id: string) {
     const response = await client.post(`/pick-jobs/${id}/accept`);
+    return response.data;
+  }
+
+  async acceptItem(id: string, itemId: string) {
+    const response = await client.post(`/pick-jobs/${id}/items/${itemId}/accept`);
+    return response.data;
+  }
+
+  async releaseItem(id: string, itemId: string) {
+    const response = await client.post(`/pick-jobs/${id}/items/${itemId}/release`);
     return response.data;
   }
 
@@ -68,6 +92,27 @@ class PickingService {
     const url = window.URL.createObjectURL(blob);
     window.open(url, '_blank');
     setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  }
+
+  getReservedLabelsUrl(id: string) {
+    return `${INVENTORY_API}/pick-jobs/${id}/labels-reserved.pdf`;
+  }
+
+  async openReservedLabels(id: string) {
+    const response = await client.get(`/pick-jobs/${id}/labels-reserved.pdf`, { responseType: 'blob' });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  }
+
+  async listMyItems(opts?: { page?: number; limit?: number; status?: string }) {
+    const params: Record<string, unknown> = { mine: 1 };
+    if (opts?.page) params.page = opts.page;
+    if (opts?.limit) params.limit = opts.limit;
+    if (opts?.status) params.status = opts.status;
+    const response = await client.get('/pick-items', { params });
+    return response.data as { success: boolean; data: (PickJobItem & { job_number: string; job_id: string })[]; pagination?: { page: number; limit: number; total: number } };
   }
 }
 

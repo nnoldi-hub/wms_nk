@@ -1,4 +1,4 @@
-import axios from 'axios';
+import apiClient from './api';
 
 const INVENTORY_API = 'http://localhost:3011';
 
@@ -114,36 +114,36 @@ class BatchService {
     params.append('limit', limit.toString());
     params.append('offset', offset.toString());
 
-    const response = await axios.get(`${INVENTORY_API}/api/v1/batches?${params}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/batches?${params}`);
     return response.data.data || response.data;
   }
 
   async getById(id: string): Promise<Batch> {
-    const response = await axios.get(`${INVENTORY_API}/api/v1/batches/${id}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/batches/${id}`);
     return response.data.data || response.data;
   }
 
   async getByProduct(sku: string): Promise<Batch[]> {
-    const response = await axios.get(`${INVENTORY_API}/api/v1/batches/product/${sku}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/batches/product/${sku}`);
     return response.data.data || response.data;
   }
 
   async create(batch: CreateBatchDto): Promise<Batch> {
-    const response = await axios.post(`${INVENTORY_API}/api/v1/batches`, batch);
+    const response = await apiClient.post(`${INVENTORY_API}/api/v1/batches`, batch);
     return response.data.data || response.data;
   }
 
   async update(id: string, batch: UpdateBatchDto): Promise<Batch> {
-    const response = await axios.put(`${INVENTORY_API}/api/v1/batches/${id}`, batch);
+    const response = await apiClient.put(`${INVENTORY_API}/api/v1/batches/${id}`, batch);
     return response.data.data || response.data;
   }
 
   async delete(id: string): Promise<void> {
-    await axios.delete(`${INVENTORY_API}/api/v1/batches/${id}`);
+    await apiClient.delete(`${INVENTORY_API}/api/v1/batches/${id}`);
   }
 
   async getStatistics(): Promise<BatchStatistics> {
-    const response = await axios.get(`${INVENTORY_API}/api/v1/batches/statistics`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/batches/statistics`);
     return response.data.data || response.data;
   }
 
@@ -161,7 +161,7 @@ class BatchService {
       queryParams.append('preferred_location', params.preferred_location);
     }
 
-    const response = await axios.get(`${INVENTORY_API}/api/v1/batches/select?${queryParams}`);
+    const response = await apiClient.get(`${INVENTORY_API}/api/v1/batches/select?${queryParams}`);
     return response.data.data || response.data;
   }
 
