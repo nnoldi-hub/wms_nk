@@ -75,8 +75,7 @@ export const OrdersPage = () => {
                   setSnackbar({ open: true, message: 'Nu există job de culegere pentru această comandă', severity: 'error' });
                   return;
                 }
-                const url = ordersService.getLabelsUrl(job.id);
-                window.open(url, '_blank');
+                await ordersService.openLabels(job.id);
               } catch {
                 setSnackbar({ open: true, message: 'Eroare la deschiderea etichetelor', severity: 'error' });
               }

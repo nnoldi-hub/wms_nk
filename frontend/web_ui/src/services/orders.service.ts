@@ -92,6 +92,16 @@ class OrdersService {
   getLabelsUrl(jobId: string) {
     return `${INVENTORY_API}/pick-jobs/${jobId}/labels.pdf`;
   }
+
+  async openLabels(jobId: string) {
+    // Use axios to include Authorization header and get the PDF as blob, then open
+    const response = await client.get(`/pick-jobs/${jobId}/labels.pdf`, { responseType: 'blob' });
+    const blob = new Blob([response.data], { type: 'application/pdf' });
+    const url = window.URL.createObjectURL(blob);
+    window.open(url, '_blank');
+    // Optionally revoke later
+    setTimeout(() => window.URL.revokeObjectURL(url), 60_000);
+  }
 }
 
 export const ordersService = new OrdersService();
