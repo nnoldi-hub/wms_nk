@@ -3,6 +3,7 @@ import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Box, Typogra
 import PrintIcon from '@mui/icons-material/Print';
 import DownloadIcon from '@mui/icons-material/Download';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
 import { ordersService, type Order, type OrderLine } from '../services/orders.service';
 
 interface Props {
@@ -56,6 +57,21 @@ export const OrderDetailsDialog = ({ open, orderId, onClose }: Props) => {
       setLines(res.lines);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handlePrintLabels = async () => {
+    if (!orderId) return;
+    try {
+      const job = await ordersService.findPickJobByOrder(orderId);
+      if (!job) {
+        // fallback: alert for now; page Snackbar already handles other flows
+        alert('Nu există job de culegere pentru această comandă');
+        return;
+      }
+      await ordersService.openLabels(job.id);
+    } catch {
+      alert('Eroare la deschiderea etichetelor');
     }
   };
 
@@ -116,6 +132,7 @@ export const OrderDetailsDialog = ({ open, orderId, onClose }: Props) => {
           <Button variant="outlined" startIcon={<RefreshIcon />} onClick={handleRefresh} disabled={loading}>Reîncarcă</Button>
         </Stack>
         <Button onClick={handleDownload} startIcon={<DownloadIcon />} disabled={!order}>Descarcă PDF</Button>
+        <Button onClick={handlePrintLabels} startIcon={<QrCode2Icon />} disabled={!order}>Etichete</Button>
         <Button onClick={handlePrint} startIcon={<PrintIcon />} disabled={!order}>Imprimă</Button>
         <Button onClick={onClose} variant="contained">Închide</Button>
       </DialogActions>
