@@ -38,6 +38,16 @@ class PickingService {
     return response.data as { success: boolean; data: PickJob[]; pagination?: { page: number; limit: number; total: number } };
   }
 
+  async getJob(id: string) {
+    const response = await client.get(`/pick-jobs/${id}`);
+    return response.data as { success: boolean; data: { job: PickJob; items: Array<{ id: string; product_sku: string; requested_qty: number; picked_qty: number; status: string; uom?: string; lot_label?: string }> } };
+  }
+
+  async pick(id: string, payload: { item_id?: string; sku?: string; qty: number; lot_label?: string }) {
+    const response = await client.post(`/pick-jobs/${id}/pick`, payload);
+    return response.data;
+  }
+
   async accept(id: string) {
     const response = await client.post(`/pick-jobs/${id}/accept`);
     return response.data;

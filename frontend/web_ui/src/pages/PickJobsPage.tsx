@@ -4,7 +4,9 @@ import { DataGrid, type GridColDef, type GridPaginationModel, type GridRowsProp 
 import QrCode2Icon from '@mui/icons-material/QrCode2';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PersonAddAlt1Icon from '@mui/icons-material/PersonAddAlt1';
+import VisibilityIcon from '@mui/icons-material/Visibility';
 import { pickingService, type PickJob } from '../services/picking.service';
+import { PickJobDetailsDialog } from '../components/PickJobDetailsDialog';
 
 export const PickJobsPage = () => {
   const [rows, setRows] = useState<GridRowsProp>([]);
@@ -13,6 +15,8 @@ export const PickJobsPage = () => {
   const [rowCount, setRowCount] = useState(0);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
   const [filter, setFilter] = useState<'all' | 'mine' | 'new'>('all');
+  const [openDetails, setOpenDetails] = useState(false);
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null);
 
   const fetchJobs = async () => {
     setLoading(true);
@@ -70,6 +74,11 @@ export const PickJobsPage = () => {
     {
       field: 'actions', headerName: 'Acțiuni', width: 180, sortable: false, renderCell: (params) => (
         <Box>
+          <Tooltip title="Detalii">
+            <IconButton size="small" onClick={() => { setSelectedJobId(params.row.id as string); setOpenDetails(true); }}>
+              <VisibilityIcon />
+            </IconButton>
+          </Tooltip>
           <Tooltip title="Etichete">
             <IconButton size="small" onClick={() => pickingService.openLabels(params.row.id as string)}>
               <QrCode2Icon />
@@ -123,6 +132,7 @@ export const PickJobsPage = () => {
       <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })} anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}>
         <Alert severity={snackbar.severity} onClose={() => setSnackbar({ ...snackbar, open: false })}>{snackbar.message}</Alert>
       </Snackbar>
+      <PickJobDetailsDialog open={openDetails} jobId={selectedJobId} onClose={() => setOpenDetails(false)} onChanged={fetchJobs} />
     </Box>
   );
 };
