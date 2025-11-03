@@ -1,8 +1,11 @@
 const express = require('express');
+const cors = require('cors');
 const { Pool } = require('pg');
 const redis = require('redis');
 const winston = require('winston');
 const promClient = require('prom-client');
+const { errorHandler } = require('./middleware/errorHandler');
+require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -32,6 +35,29 @@ const httpRequestDuration = new promClient.Histogram({
 
 // Middleware
 app.use(express.json());
+
+// CORS - allow web UI (Vite dev server) and handle preflight without auth
+const corsOptions = {
+  origin: process.env.WEB_UI_ORIGIN || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true,
+};
+app.use(cors(corsOptions));
+// Ensure preflight requests short-circuit before hitting auth middleware
+app.options('*', cors(corsOptions));
+
+// Harden preflight handling: explicitly return 204 with CORS headers
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    res.header('Access-Control-Allow-Origin', corsOptions.origin);
+    res.header('Access-Control-Allow-Methods', corsOptions.methods.join(','));
+    res.header('Access-Control-Allow-Headers', corsOptions.allowedHeaders.join(','));
+    res.header('Access-Control-Allow-Credentials', 'true');
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 // Request logging middleware
 app.use((req, res, next) => {
@@ -116,11 +142,23 @@ app.get('/metrics', async (req, res) => {
 const productsRoutes = require('./routes/products');
 const locationsRoutes = require('./routes/locations');
 const movementsRoutes = require('./routes/movements');
+const batchesRoutes = require('./routes/batches');
+const transformationsRoutes = require('./routes/transformations');
+const importRoutes = require('./routes/import');
+const ordersRoutes = require('./routes/orders');
+const pickingRoutes = require('./routes/picking');
+const inventoryRoutes = require('./routes/inventory');
 
 // API routes
 app.use('/api/v1/products', productsRoutes);
 app.use('/api/v1/locations', locationsRoutes);
 app.use('/api/v1/movements', movementsRoutes);
+app.use('/api/v1/batches', batchesRoutes);
+app.use('/api/v1/transformations', transformationsRoutes);
+app.use('/api/v1/inventory', inventoryRoutes);
+app.use('/api/v1', importRoutes);
+app.use('/api/v1', ordersRoutes);
+app.use('/api/v1', pickingRoutes);
 
 // Legacy compatibility endpoint
 app.get('/api/v1/inventory', async (req, res) => {
@@ -146,14 +184,7 @@ app.get('/api/v1/inventory', async (req, res) => {
 });
 
 // Error handling middleware
-app.use((err, req, res, next) => {
-  logger.error('Unhandled error:', err);
-  res.status(500).json({
-    success: false,
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : undefined
-  });
-});
+app.use(errorHandler);
 
 // 404 handler
 app.use((req, res) => {

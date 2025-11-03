@@ -33,7 +33,8 @@ exports.getAllUsers = async (req, res) => {
     const total = parseInt(countResult.rows[0].count);
 
     res.json({
-      users: result.rows,
+      success: true,
+      data: result.rows,
       pagination: {
         page: parseInt(page),
         limit: parseInt(limit),
@@ -67,9 +68,61 @@ exports.getUserById = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
-    res.json({ user: result.rows[0] });
+    res.json({ success: true, data: result.rows[0] });
   } catch (error) {
     req.logger.error('Get user by ID error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// Create new user (admin only)
+exports.createUser = async (req, res) => {
+  try {
+    const { username, email, password, role = 'operator', is_active = true } = req.body;
+
+    // Validate required fields
+    if (!username || !email || !password) {
+      return res.status(400).json({ error: 'Username, email, and password are required' });
+    }
+
+    // Check if username or email already exists
+    const existingUser = await req.db.query(
+      'SELECT id FROM users WHERE username = $1 OR email = $2',
+      [username, email]
+    );
+
+    if (existingUser.rows.length > 0) {
+      return res.status(409).json({ error: 'Username or email already exists' });
+    }
+
+    // Hash password
+    const passwordHash = await bcrypt.hash(password, 10);
+
+    // Create user
+    const result = await req.db.query(
+      `INSERT INTO users (username, email, password_hash, role, is_active) 
+       VALUES ($1, $2, $3, $4, $5) 
+       RETURNING id, username, email, role, is_active, created_at`,
+      [username, email, passwordHash, role, is_active]
+    );
+
+    const newUser = result.rows[0];
+
+    // Audit log
+    await req.db.query(
+      `INSERT INTO audit_logs (entity_type, entity_id, action, user_id, metadata) 
+       VALUES ($1, $2, $3, $4, $5)`,
+      ['user', newUser.id, 'create', req.user.userId, JSON.stringify({ username, email, role })]
+    );
+
+    req.logger.info(`User ${username} created by ${req.user.username}`);
+
+    res.status(201).json({
+      success: true,
+      data: newUser
+    });
+  } catch (error) {
+    req.logger.error('Create user error', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 };
@@ -147,8 +200,8 @@ exports.updateUser = async (req, res) => {
     req.logger.info(`User ${id} updated by ${req.user.username}`);
 
     res.json({
-      message: 'User updated successfully',
-      user: result.rows[0]
+      success: true,
+      data: result.rows[0]
     });
   } catch (error) {
     req.logger.error('Update user error', error);
@@ -190,7 +243,7 @@ exports.deleteUser = async (req, res) => {
 
     req.logger.info(`User ${id} deleted by ${req.user.username}`);
 
-    res.json({ message: 'User deleted successfully' });
+    res.json({ success: true, message: 'User deleted successfully' });
   } catch (error) {
     req.logger.error('Delete user error', error);
     res.status(500).json({ error: 'Internal server error' });

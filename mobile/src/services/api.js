@@ -114,4 +114,21 @@ export const movementsAPI = {
     api.post(API_CONFIG.ENDPOINTS.MOVEMENTS_ADJUST, adjustmentData),
 };
 
+export const pickingAPI = {
+  list: (params) =>
+    api.get(API_CONFIG.ENDPOINTS.PICK_JOBS, { params }),
+
+  get: (id) =>
+    api.get(API_CONFIG.ENDPOINTS.PICK_JOB_BY_ID(id)),
+
+  accept: (id) =>
+    api.post(API_CONFIG.ENDPOINTS.PICK_JOB_ACCEPT(id)),
+
+  pick: (id, payload) =>
+    api.post(API_CONFIG.ENDPOINTS.PICK_JOB_PICK(id), payload),
+
+  complete: (id, payload) =>
+    api.post(`${API_CONFIG.ENDPOINTS.PICK_JOB_BY_ID(id)}/complete`, payload || {}),
+};
+
 export default api;

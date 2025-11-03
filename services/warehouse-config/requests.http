@@ -1,0 +1,98 @@
+### Warehouse Config Service - REST Client examples
+# Variables
+@token = REPLACE_WITH_JWT
+@direct = http://localhost:3020
+@gateway = http://localhost:8000/warehouse-config
+
+### Health (direct)
+GET {{@direct}}/health
+
+### Health (via Kong)
+GET {{@gateway}}/health
+
+### Vehicles: create
+POST {{@gateway}}/api/v1/vehicles
+Authorization: Bearer {{@token}}
+Content-Type: application/json
+
+{
+  "warehouse_id": "REPLACE-WAREHOUSE-UUID",
+  "vehicle_code": "V-DEV-001",
+  "vehicle_type": "VAN",
+  "license_plate": "B-01-DEV",
+  "max_weight_kg": 1200
+}
+
+### Vehicles: get by id
+GET {{@gateway}}/api/v1/vehicles/REPLACE-VEHICLE-UUID
+Authorization: Bearer {{@token}}
+
+### Vehicles: list (with pagination)
+GET {{@gateway}}/api/v1/vehicles?page=1&limit=20&sortBy=vehicle_code&sortDir=asc
+Authorization: Bearer {{@token}}
+
+### Delivery zones: create
+POST {{@gateway}}/api/v1/delivery-zones
+Authorization: Bearer {{@token}}
+Content-Type: application/json
+
+{
+  "warehouse_id": "REPLACE-WAREHOUSE-UUID",
+  "zone_code": "DZ-LOCAL-01",
+  "zone_name": "Bucuresti",
+  "zone_type": "LOCAL",
+  "regions": ["Bucuresti"]
+}
+
+### Delivery zones: list for warehouse
+GET {{@gateway}}/api/v1/warehouses/REPLACE-WAREHOUSE-UUID/delivery-zones
+Authorization: Bearer {{@token}}
+
+### Delivery zones: list for warehouse (with pagination)
+GET {{@gateway}}/api/v1/warehouses/REPLACE-WAREHOUSE-UUID/delivery-zones?page=1&limit=10&sortBy=zone_code&sortDir=asc
+Authorization: Bearer {{@token}}
+
+### Delivery zone: upsert carrier availability
+POST {{@gateway}}/api/v1/delivery-zones/REPLACE-ZONE-UUID/carriers
+Authorization: Bearer {{@token}}
+Content-Type: application/json
+
+{
+  "carrier_id": "REPLACE-CARRIER-UUID",
+  "priority": 1,
+  "estimated_delivery_days": 1,
+  "is_available": true
+}
+
+### Workflow: create state
+POST {{@gateway}}/api/v1/workflow/states
+Authorization: Bearer {{@token}}
+Content-Type: application/json
+
+{
+  "state_code": "TEST_STATE",
+  "state_name": "Test State",
+  "state_category": "QC"
+}
+
+### Workflow: list states for a warehouse
+GET {{@gateway}}/api/v1/warehouses/REPLACE-WAREHOUSE-UUID/workflow/states
+Authorization: Bearer {{@token}}
+
+### Warehouse settings: create
+POST {{@gateway}}/api/v1/warehouse-settings
+Authorization: Bearer {{@token}}
+Content-Type: application/json
+
+{
+  "warehouse_id": "REPLACE-WAREHOUSE-UUID",
+  "setting_category": "INVENTORY",
+  "setting_key": "putaway.strategy",
+  "setting_value": "fixed-location",
+  "setting_type": "STRING",
+  "validation_rules": { "enum": ["fixed-location","closest-fit","randomized"] }
+}
+
+### Warehouse settings: list (by category, with pagination)
+GET {{@gateway}}/api/v1/warehouses/REPLACE-WAREHOUSE-UUID/settings?category=INVENTORY&page=1&limit=20&sortBy=setting_category&sortDir=asc
+Authorization: Bearer {{@token}}

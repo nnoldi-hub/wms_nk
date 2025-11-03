@@ -711,31 +711,82 @@ services:
       timeout: 10s
       retries: 3
 
+  # Warehouse Configuration Service
+  warehouse-config:
+    build:
+      context: ./services/warehouse-config
+      dockerfile: Dockerfile
+    container_name: wms-warehouse-config
+    restart: unless-stopped
+    environment:
+      NODE_ENV: development
+      PORT: 3000
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: wms_nks
+      DB_USER: wms_admin
+      DB_PASSWORD: wms_secure_pass_2025
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: redis_pass_2025
+      # Optional service URLs if needed later
+      AUTH_SERVICE_URL: http://auth-service:3000
+      INVENTORY_SERVICE_URL: http://inventory-service:3000
+      CORS_ORIGIN: http://localhost:5173
+      LOG_LEVEL: info
+      # Dev token endpoint security (leave empty to allow without secret)
+      DEV_TOOL_SECRET: ""
+    ports:
+      - "3020:3000"
+    volumes:
+      - ./services/warehouse-config:/app
+      - /app/node_modules
+    networks:
+      - wms-network
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
   # =============================================================================
   # FRONTEND LAYER
   # =============================================================================
 
-  # Web UI
+  # Web UI - Development mode cu Vite
   web-ui:
     build:
       context: ./frontend/web_ui
       dockerfile: Dockerfile
+      target: development
     container_name: wms-web-ui
     restart: unless-stopped
     environment:
       NODE_ENV: development
-      VITE_API_GATEWAY_URL: http://localhost:8000
+      # Frontend env variable consumed by api client
+      VITE_API_URL: http://localhost:3010
       VITE_WS_URL: ws://localhost:3017
     ports:
-      - "3000:3000"
+      - "5173:5173"
     volumes:
       - ./frontend/web_ui:/app
       - /app/node_modules
     networks:
       - wms-network
     depends_on:
-      - kong
-    command: npm run dev -- --host 0.0.0.0
+      - auth-service
+      - inventory-service
+      - notifications-service
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:5173"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 # =============================================================================
 # NETWORKS

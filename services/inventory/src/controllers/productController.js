@@ -164,3 +164,69 @@ exports.updateProduct = async (req, res) => {
     res.status(500).json({ success: false, error: error.message });
   }
 };
+
+exports.deleteProduct = async (req, res) => {
+  try {
+    const { sku } = req.params;
+
+    const result = await req.db.query(`
+      DELETE FROM products
+      WHERE sku = $1
+      RETURNING sku, name
+    `, [sku]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+
+    // Audit log
+    await req.db.query(`
+      INSERT INTO audit_logs (entity_type, entity_id, action, user_id, metadata)
+      VALUES ($1, $2, $3, $4, $5)
+    `, ['product', sku, 'DELETE', req.user.userId, JSON.stringify(result.rows[0])]);
+
+    res.json({
+      success: true,
+      message: 'Product deleted successfully',
+      data: result.rows[0]
+    });
+  } catch (error) {
+    req.logger.error('Delete product error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
+// Temporary categories endpoint (since DB schema has no explicit category column)
+// Returns a curated list used by the Web UI filter until schema evolves
+exports.getCategories = async (req, res) => {
+  try {
+    // If a future migration adds a 'category' column, try to read distinct values first
+    try {
+      const distinct = await req.db.query(
+        "SELECT DISTINCT category FROM information_schema.columns c JOIN (SELECT 1) x ON 1=1 WHERE c.table_name='products' AND c.column_name='category'"
+      );
+      // Quick check: column exists if any row returned (information_schema join trick)
+      if (distinct && distinct.rowCount > 0) {
+        const rows = await req.db.query("SELECT DISTINCT category FROM products WHERE category IS NOT NULL AND category <> '' ORDER BY category ASC");
+        return res.json({ success: true, data: rows.rows.map(r => r.category) });
+      }
+    } catch (_) { /* ignore and use fallback */ }
+
+    const fallback = [
+      'Materials',
+      'Accessories',
+      'Labels',
+      'Threads',
+      'Packaging',
+      'Cables',
+      'Other'
+    ];
+    return res.json({ success: true, data: fallback });
+  } catch (error) {
+    req.logger.error('Get categories error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};

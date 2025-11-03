@@ -16,6 +16,7 @@ pool.on('error', (err) => logger.error('DB pool error:', err));
 
 module.exports = {
   query: (text, params) => pool.query(text, params),
+  getClient: () => pool.connect(),
   testConnection: async () => {
     const result = await pool.query('SELECT NOW()');
     logger.info('Database connected:', result.rows[0].now);

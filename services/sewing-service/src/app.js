@@ -11,7 +11,24 @@ const app = express();
 const PORT = process.env.PORT || 3014;
 
 app.use(helmet());
-app.use(cors());
+
+// CORS configuration
+app.use(cors({
+  origin: process.env.WEB_UI_ORIGIN || 'http://localhost:5173',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true
+}));
+
+// Handle preflight requests
+app.options('*', (req, res) => {
+  res.setHeader('Access-Control-Allow-Origin', process.env.WEB_UI_ORIGIN || 'http://localhost:5173');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
+  res.sendStatus(204);
+});
+
 app.use(express.json());
 
 app.get('/health', (req, res) => {

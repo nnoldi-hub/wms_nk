@@ -125,6 +125,22 @@ try {
     Write-Host "  [WARN] Inventory Routes exista sau eroare" -ForegroundColor Yellow
 }
 
+# Add extra routes for Orders and Picking Jobs
+$inventoryRoute2 = @{
+    name = "inventory-orders-picking"
+    protocols = @("http", "https")
+    paths = @("/api/v1/orders", "/api/v1/pick-jobs")
+    strip_path = $false
+    preserve_host = $false
+} | ConvertTo-Json
+
+try {
+    $route2 = Invoke-RestMethod -Uri "$KONG_ADMIN/services/inventory-service/routes" -Method Post -Body $inventoryRoute2 -ContentType "application/json"
+    Write-Host "  [OK] Inventory Orders/Picking Routes create: $($route2.id)" -ForegroundColor Green
+} catch {
+    Write-Host "  [WARN] Inventory Orders/Picking Routes exista sau eroare" -ForegroundColor Yellow
+}
+
 # Add Rate Limiting to Inventory (200 requests per minute)
 $rateLimitInv = @{
     name = "rate-limiting"

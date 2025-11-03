@@ -22,6 +22,13 @@ export const API_CONFIG = {
     // Movements
     MOVEMENTS: '/api/v1/movements',
     MOVEMENTS_ADJUST: '/api/v1/movements/adjust',
+
+    // Picking Jobs
+    PICK_JOBS: '/api/v1/pick-jobs',
+    PICK_JOB_BY_ID: (id) => `/api/v1/pick-jobs/${id}`,
+    PICK_JOB_ACCEPT: (id) => `/api/v1/pick-jobs/${id}/accept`,
+    PICK_JOB_PICK: (id) => `/api/v1/pick-jobs/${id}/pick`,
+    ORDER_ALLOCATE: (id) => `/api/v1/orders/${id}/allocate`,
   }
 };
 

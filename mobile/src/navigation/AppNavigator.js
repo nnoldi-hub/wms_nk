@@ -15,6 +15,8 @@ import LocationsScreen from '../screens/LocationsScreen';
 import LocationDetailsScreen from '../screens/LocationDetailsScreen';
 import MovementsScreen from '../screens/MovementsScreen';
 import HistoryScreen from '../screens/HistoryScreen';
+import PickJobsScreen from '../screens/PickJobsScreen';
+import PickJobDetailsScreen from '../screens/PickJobDetailsScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -58,6 +60,16 @@ const TabNavigator = () => {
           title: 'Scan',
           headerShown: false,
           tabBarIcon: () => '📷',
+        }}
+      />
+      <Tab.Screen
+        name="Jobs"
+        component={PickJobsScreen}
+        options={{
+          title: 'Joburi',
+          headerStyle: { backgroundColor: APP_CONFIG.COLORS.CARD },
+          headerTintColor: APP_CONFIG.COLORS.TEXT,
+          tabBarIcon: () => '🧾',
         }}
       />
       <Tab.Screen
@@ -124,6 +136,11 @@ const AppNavigator = () => {
               name="Movements"
               component={MovementsScreen}
               options={{ title: 'Create Movement' }}
+            />
+            <Stack.Screen
+              name="PickJobDetails"
+              component={PickJobDetailsScreen}
+              options={{ title: 'Job' }}
             />
           </>
         )}

@@ -5,7 +5,7 @@ const { AppError } = require('../middleware/errorHandler');
 class OrderController {
   static async getOrders(req, res, next) {
     try {
-      const { status, machine_id, limit = 50, offset = 0 } = req.query;
+      const { status, limit = 50, offset = 0 } = req.query;
       let query = 'SELECT * FROM sewing_orders WHERE 1=1';
       const params = [];
       let paramIndex = 1;
@@ -14,16 +14,12 @@ class OrderController {
         query += ` AND status = $${paramIndex++}`;
         params.push(status);
       }
-      if (machine_id) {
-        query += ` AND machine_id = $${paramIndex++}`;
-        params.push(machine_id);
-      }
 
       query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
       params.push(limit, offset);
 
       const result = await pool.query(query, params);
-      res.json({ orders: result.rows, count: result.rows.length });
+      res.json({ success: true, data: result.rows });
     } catch (error) {
       next(error);
     }
@@ -31,18 +27,18 @@ class OrderController {
 
   static async createOrder(req, res, next) {
     try {
-      const { cutting_order_id, machine_id, operator_id, estimated_time, notes } = req.body;
+      const { product_sku, cutting_order_id, quantity, priority = 'NORMAL', notes } = req.body;
       
       const result = await pool.query(
         `INSERT INTO sewing_orders 
-        (cutting_order_id, machine_id, operator_id, estimated_time, notes, status) 
-        VALUES ($1, $2, $3, $4, $5, 'PENDING') 
+        (product_sku, cutting_order_id, quantity, priority, status, notes, created_at) 
+        VALUES ($1, $2, $3, $4, 'PENDING', $5, NOW()) 
         RETURNING *`,
-        [cutting_order_id, machine_id, operator_id, estimated_time, notes]
+        [product_sku, cutting_order_id, quantity, priority, notes]
       );
 
       logger.info(`Sewing order created: ${result.rows[0].id}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
       next(error);
     }
@@ -57,7 +53,7 @@ class OrderController {
         throw new AppError('Sewing order not found', 404);
       }
 
-      res.json(result.rows[0]);
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
       next(error);
     }
@@ -66,56 +62,27 @@ class OrderController {
   static async updateOrder(req, res, next) {
     try {
       const { id } = req.params;
-      const { status, actual_time, defects_count, rework_count } = req.body;
+      const { status, worker_id, actual_quantity, defect_quantity, quality_notes, notes } = req.body;
       
       const result = await pool.query(
         `UPDATE sewing_orders 
         SET status = COALESCE($1, status),
-            actual_time = COALESCE($2, actual_time),
-            defects_count = COALESCE($3, defects_count),
-            rework_count = COALESCE($4, rework_count),
+            worker_id = COALESCE($2, worker_id),
+            actual_quantity = COALESCE($3, actual_quantity),
+            defect_quantity = COALESCE($4, defect_quantity),
+            quality_notes = COALESCE($5, quality_notes),
+            notes = COALESCE($6, notes),
             updated_at = NOW()
-        WHERE id = $5 
+        WHERE id = $7 
         RETURNING *`,
-        [status, actual_time, defects_count, rework_count, id]
+        [status, worker_id, actual_quantity, defect_quantity, quality_notes, notes, id]
       );
 
       if (result.rows.length === 0) {
         throw new AppError('Sewing order not found', 404);
       }
 
-      res.json(result.rows[0]);
-    } catch (error) {
-      next(error);
-    }
-  }
-
-  static async addCheckpoint(req, res, next) {
-    try {
-      const { id } = req.params;
-      const { checkpoint_type, passed, notes } = req.body;
-
-      const result = await pool.query(
-        `UPDATE sewing_orders 
-        SET checkpoints = COALESCE(checkpoints, '[]'::jsonb) || 
-            jsonb_build_object(
-              'type', $1, 
-              'passed', $2, 
-              'notes', $3, 
-              'timestamp', NOW()
-            )::jsonb,
-            updated_at = NOW()
-        WHERE id = $4 
-        RETURNING *`,
-        [checkpoint_type, passed, notes, id]
-      );
-
-      if (result.rows.length === 0) {
-        throw new AppError('Sewing order not found', 404);
-      }
-
-      logger.info(`Checkpoint added to order ${id}: ${checkpoint_type}`);
-      res.json(result.rows[0]);
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
       next(error);
     }
@@ -140,7 +107,7 @@ class OrderController {
       }
 
       logger.info(`Sewing order completed: ${id}`);
-      res.json(result.rows[0]);
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
       next(error);
     }

@@ -5,45 +5,41 @@ const { AppError } = require('../middleware/errorHandler');
 class InspectionController {
   static async getInspections(req, res, next) {
     try {
-      const { status, inspector_id, limit = 50, offset = 0 } = req.query;
+      const { status } = req.query;
       let query = 'SELECT * FROM qc_inspections WHERE 1=1';
       const params = [];
-      let paramIndex = 1;
 
       if (status) {
-        query += ` AND status = $${paramIndex++}`;
+        query += ' AND status = $1';
         params.push(status);
       }
-      if (inspector_id) {
-        query += ` AND inspector_id = $${paramIndex++}`;
-        params.push(inspector_id);
-      }
 
-      query += ` ORDER BY created_at DESC LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
-      params.push(limit, offset);
+      query += ' ORDER BY created_at DESC';
 
       const result = await pool.query(query, params);
-      res.json({ inspections: result.rows, count: result.rows.length });
+      res.json({ success: true, data: result.rows });
     } catch (error) {
+      logger.error('Error fetching inspections:', error);
       next(error);
     }
   }
 
   static async createInspection(req, res, next) {
     try {
-      const { sewing_order_id, inspector_id, inspection_type, checklist } = req.body;
+      const { sewing_order_id, inspector_id, defects_found, severity, inspection_notes, notes } = req.body;
       
       const result = await pool.query(
         `INSERT INTO qc_inspections 
-        (sewing_order_id, inspector_id, inspection_type, checklist, status) 
-        VALUES ($1, $2, $3, $4, 'IN_PROGRESS') 
+        (sewing_order_id, inspector_id, defects_found, severity, inspection_notes, notes, status) 
+        VALUES ($1, $2, $3, $4, $5, $6, 'IN_PROGRESS') 
         RETURNING *`,
-        [sewing_order_id, inspector_id, inspection_type, JSON.stringify(checklist)]
+        [sewing_order_id, inspector_id, defects_found || 0, severity, inspection_notes, notes]
       );
 
       logger.info(`QC inspection created: ${result.rows[0].id}`);
-      res.status(201).json(result.rows[0]);
+      res.status(201).json({ success: true, data: result.rows[0] });
     } catch (error) {
+      logger.error('Error creating inspection:', error);
       next(error);
     }
   }
@@ -51,56 +47,57 @@ class InspectionController {
   static async getInspectionById(req, res, next) {
     try {
       const { id } = req.params;
-      const inspection = await pool.query('SELECT * FROM qc_inspections WHERE id = $1', [id]);
+      const result = await pool.query('SELECT * FROM qc_inspections WHERE id = $1', [id]);
       
-      if (inspection.rows.length === 0) {
+      if (result.rows.length === 0) {
         throw new AppError('Inspection not found', 404);
       }
 
-      const defects = await pool.query('SELECT * FROM qc_defects WHERE inspection_id = $1', [id]);
-      
-      res.json({ ...inspection.rows[0], defects: defects.rows });
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
+      logger.error('Error fetching inspection:', error);
       next(error);
     }
   }
 
-  static async addDefect(req, res, next) {
+  static async updateInspection(req, res, next) {
     try {
       const { id } = req.params;
-      const { defect_type, severity, location, description, image_url } = req.body;
+      const { defects_found, severity, inspection_notes, notes } = req.body;
       
       const result = await pool.query(
-        `INSERT INTO qc_defects 
-        (inspection_id, defect_type, severity, location, description, image_url) 
-        VALUES ($1, $2, $3, $4, $5, $6) 
-        RETURNING *`,
-        [id, defect_type, severity, location, description, image_url]
-      );
-
-      await pool.query(
         `UPDATE qc_inspections 
-        SET defects_count = defects_count + 1, updated_at = NOW() 
-        WHERE id = $1`,
-        [id]
+        SET defects_found = COALESCE($1, defects_found),
+            severity = COALESCE($2, severity),
+            inspection_notes = COALESCE($3, inspection_notes),
+            notes = COALESCE($4, notes),
+            updated_at = NOW()
+        WHERE id = $5 
+        RETURNING *`,
+        [defects_found, severity, inspection_notes, notes, id]
       );
 
-      logger.info(`Defect added to inspection ${id}: ${defect_type}`);
-      res.status(201).json(result.rows[0]);
+      if (result.rows.length === 0) {
+        throw new AppError('Inspection not found', 404);
+      }
+
+      logger.info(`Inspection updated: ${id}`);
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
+      logger.error('Error updating inspection:', error);
       next(error);
     }
   }
 
-  static async approveInspection(req, res, next) {
+  static async passInspection(req, res, next) {
     try {
       const { id } = req.params;
       const { notes } = req.body;
       
       const result = await pool.query(
         `UPDATE qc_inspections 
-        SET status = 'APPROVED', 
-            notes = $1,
+        SET status = 'PASSED', 
+            notes = COALESCE($1, notes),
             completed_at = NOW(),
             updated_at = NOW()
         WHERE id = $2 
@@ -112,37 +109,38 @@ class InspectionController {
         throw new AppError('Inspection not found', 404);
       }
 
-      logger.info(`Inspection approved: ${id}`);
-      res.json(result.rows[0]);
+      logger.info(`Inspection passed: ${id}`);
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
+      logger.error('Error passing inspection:', error);
       next(error);
     }
   }
 
-  static async rejectInspection(req, res, next) {
+  static async failInspection(req, res, next) {
     try {
       const { id } = req.params;
-      const { reason, rework_required } = req.body;
+      const { notes } = req.body;
       
       const result = await pool.query(
         `UPDATE qc_inspections 
-        SET status = 'REJECTED', 
-            rejection_reason = $1,
-            rework_required = $2,
+        SET status = 'FAILED', 
+            notes = COALESCE($1, notes),
             completed_at = NOW(),
             updated_at = NOW()
-        WHERE id = $3 
+        WHERE id = $2 
         RETURNING *`,
-        [reason, rework_required, id]
+        [notes, id]
       );
 
       if (result.rows.length === 0) {
         throw new AppError('Inspection not found', 404);
       }
 
-      logger.info(`Inspection rejected: ${id}`);
-      res.json(result.rows[0]);
+      logger.info(`Inspection failed: ${id}`);
+      res.json({ success: true, data: result.rows[0] });
     } catch (error) {
+      logger.error('Error failing inspection:', error);
       next(error);
     }
   }

@@ -1,0 +1,77 @@
+name: CI
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build-test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: wms
+          POSTGRES_PASSWORD: wms
+          POSTGRES_DB: wms_config
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U wms" 
+          --health-interval=10s 
+          --health-timeout=5s 
+          --health-retries=5
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping || exit 1"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      NODE_ENV: test
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_USER: wms
+      DB_PASSWORD: wms
+      DB_NAME: wms_config
+      REDIS_HOST: localhost
+      REDIS_PORT: 6379
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        working-directory: services/warehouse-config
+        run: npm ci
+
+      - name: Wait for Postgres and Redis
+        run: |
+          for i in {1..30}; do
+            nc -z localhost 5432 && nc -z localhost 6379 && echo "Services up" && exit 0
+            echo "Waiting for services..."; sleep 2
+          done
+          echo "Services not ready in time"; exit 1
+
+      - name: Seed database
+        working-directory: services/warehouse-config
+        run: npm run seed
+
+      - name: Lint
+        working-directory: services/warehouse-config
+        run: npm run lint --silent || true
+
+      - name: Run tests
+        working-directory: services/warehouse-config
+        run: npm test --silent
