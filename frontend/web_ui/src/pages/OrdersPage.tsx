@@ -3,6 +3,7 @@ import { Box, Typography, Button, Snackbar, Alert, IconButton, Tooltip } from '@
 import { DataGrid, type GridColDef, type GridRowsProp, type GridPaginationModel } from '@mui/x-data-grid';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import PrintIcon from '@mui/icons-material/Print';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import AddTaskIcon from '@mui/icons-material/AddTask';
 import { ordersService, type Order } from '../services/orders.service';
@@ -52,7 +53,7 @@ export const OrdersPage = () => {
     { field: 'total_weight', headerName: 'Total Weight (kg)', width: 160, type: 'number' },
     { field: 'status', headerName: 'Status', width: 120 },
     {
-      field: 'actions', headerName: 'Actions', width: 140, sortable: false, renderCell: (params) => (
+      field: 'actions', headerName: 'Actions', width: 180, sortable: false, renderCell: (params) => (
         <Box>
           <Tooltip title="Generează job de culegere">
             <IconButton size="small" onClick={async () => {
@@ -64,6 +65,23 @@ export const OrdersPage = () => {
               }
             }}>
               <AddTaskIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Printează etichete">
+            <IconButton size="small" onClick={async () => {
+              try {
+                const job = await ordersService.findPickJobByOrder(params.row.id as string);
+                if (!job) {
+                  setSnackbar({ open: true, message: 'Nu există job de culegere pentru această comandă', severity: 'error' });
+                  return;
+                }
+                const url = ordersService.getLabelsUrl(job.id);
+                window.open(url, '_blank');
+              } catch {
+                setSnackbar({ open: true, message: 'Eroare la deschiderea etichetelor', severity: 'error' });
+              }
+            }}>
+              <QrCode2Icon />
             </IconButton>
           </Tooltip>
           <Tooltip title="Vezi comanda">

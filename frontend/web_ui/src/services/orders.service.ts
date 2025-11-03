@@ -81,6 +81,17 @@ class OrdersService {
     const body = response.data;
     return body?.data || body;
   }
+
+  async findPickJobByOrder(orderId: string): Promise<{ id: string; number: string } | null> {
+    const response = await client.get('/pick-jobs', { params: { order_id: orderId, limit: 1, page: 1 } });
+    const body = response.data;
+    const data = (body?.data || []) as Array<{ id: string; number: string }>;
+    return data.length ? data[0] : null;
+  }
+
+  getLabelsUrl(jobId: string) {
+    return `${INVENTORY_API}/pick-jobs/${jobId}/labels.pdf`;
+  }
 }
 
 export const ordersService = new OrdersService();

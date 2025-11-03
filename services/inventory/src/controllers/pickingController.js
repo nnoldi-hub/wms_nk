@@ -1,5 +1,6 @@
 // Picking workflow controller
 const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode');
 
 // Helper to extract user identity string
 function getUserId(req) {
@@ -87,7 +88,7 @@ module.exports = {
   // List picking jobs with optional filters
   async listJobs(req, res) {
     try {
-      const { status, assigned_to, mine, page = 1, limit = 25 } = req.query;
+      const { status, assigned_to, mine, order_id, page = 1, limit = 25 } = req.query;
       const params = [];
       let where = [];
       if (status) { params.push(status); where.push(`status = $${params.length}`); }
@@ -96,6 +97,7 @@ module.exports = {
         assigned = getUserId(req);
       }
       if (assigned) { params.push(assigned); where.push(`assigned_to = $${params.length}`); }
+      if (order_id) { params.push(order_id); where.push(`order_id = $${params.length}`); }
       const whereSql = where.length ? 'WHERE ' + where.join(' AND ') : '';
       const offset = (Number(page) - 1) * Number(limit);
       const total = await req.db.query(`SELECT COUNT(*)::int AS c FROM picking_jobs ${whereSql}`, params);
@@ -283,7 +285,7 @@ module.exports = {
     }
   }
   ,
-  // Labels PDF for picked items (simple MVP)
+  // Labels PDF for picked items (with QR)
   async labelsPdf(req, res) {
     try {
       const { id } = req.params;
@@ -301,11 +303,12 @@ module.exports = {
       doc.fontSize(14).text(`Etichete job ${job.number}`, { align: 'left' });
       doc.moveDown(0.5);
       const labelWidth = (doc.page.width - doc.page.margins.left - doc.page.margins.right) / 2 - 10;
-      const labelHeight = 90;
+      const labelHeight = 110;
       let x = doc.x;
       let y = doc.y;
       let col = 0;
-      items.forEach((it, idx) => {
+      for (let idx = 0; idx < items.length; idx++) {
+        const it = items[idx];
         const picked = Number(it.picked_qty) || 0;
         if (picked <= 0) return;
         if (y + labelHeight > doc.page.height - doc.page.margins.bottom) {
@@ -314,19 +317,34 @@ module.exports = {
         }
         doc.rect(x, y, labelWidth, labelHeight).stroke();
         const pad = 6;
-        doc.fontSize(12).text(`SKU: ${it.product_sku}`, x + pad, y + pad, { width: labelWidth - 2 * pad });
-        doc.fontSize(10).text(`Cant.: ${picked} ${it.uom || ''}`, { width: labelWidth - 2 * pad });
-        if (it.lot_label) doc.text(`Lot: ${it.lot_label}`, { width: labelWidth - 2 * pad });
-        doc.text(`Job: ${job.number}`, { width: labelWidth - 2 * pad });
-        doc.fontSize(9).fillColor('#555').text(`LBL-${idx + 1}`, { width: labelWidth - 2 * pad });
+        // Text area (left)
+        const textAreaWidth = labelWidth - 90 - 2 * pad; // reserve ~90px for QR
+        doc.fontSize(12).text(`SKU: ${it.product_sku}`, x + pad, y + pad, { width: textAreaWidth });
+        doc.fontSize(10).text(`Cant.: ${picked} ${it.uom || ''}`, { width: textAreaWidth });
+        if (it.lot_label) doc.text(`Lot: ${it.lot_label}`, { width: textAreaWidth });
+        doc.text(`Job: ${job.number}`, { width: textAreaWidth });
+        doc.fontSize(9).fillColor('#555').text(`LBL-${idx + 1}`, { width: textAreaWidth });
         doc.fillColor('#000');
+
+        // QR area (right)
+        const qrPayload = JSON.stringify({ t: 'PICK_LABEL', sku: it.product_sku, qty: picked, uom: it.uom || null, lot: it.lot_label || null, job: job.number });
+        try {
+          const qrPng = await QRCode.toBuffer(qrPayload, { type: 'png', margin: 0, width: 80, errorCorrectionLevel: 'M' });
+          doc.image(qrPng, x + labelWidth - pad - 80, y + pad, { width: 80, height: 80 });
+        } catch (err) {
+          // If QR fails, draw a placeholder box
+          doc.rect(x + labelWidth - pad - 80, y + pad, 80, 80).stroke('#999');
+          doc.fontSize(8).fillColor('#999').text('QR ERR', x + labelWidth - pad - 80, y + pad + 30, { width: 80, align: 'center' });
+          doc.fillColor('#000');
+        }
+
         col++;
         if (col % 2 === 0) {
           x = doc.x; y += labelHeight + 10; col = 0;
         } else {
           x += labelWidth + 20;
         }
-      });
+      }
       doc.end();
     } catch (e) {
       return res.status(500).json({ success: false, message: e.message });
