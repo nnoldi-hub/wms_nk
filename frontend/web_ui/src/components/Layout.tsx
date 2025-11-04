@@ -19,36 +19,43 @@ import { useAuth } from '../hooks/useAuth';
 
 const drawerWidth = 260;
 
+type Role = 'admin' | 'manager' | 'operator';
+
+type MenuItemDef = { text: string; icon: React.ReactNode; path: string; roles?: Role[] };
+type MenuGroupDef = { title: string; items: MenuItemDef[]; roles?: Role[] };
+
 // Top-level quick link (optional)
-const menuTop = [
+const menuTop: MenuItemDef[] = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
 ];
 
 // Grouped navigation matching the new sidebar layout
-const menuGroups = [
+const menuGroups: MenuGroupDef[] = [
   {
     title: 'Admin',
+    roles: ['admin', 'manager'],
     items: [
-      { text: 'Setări', icon: <SettingsApplicationsIcon />, path: '/initial-setup' },
-      { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config' },
-      { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori' },
-      { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports' },
+      { text: 'Setări', icon: <SettingsApplicationsIcon />, path: '/initial-setup', roles: ['admin', 'manager'] },
+      { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config', roles: ['admin', 'manager'] },
+      { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori', roles: ['admin'] },
+      { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports', roles: ['admin', 'manager'] },
     ],
   },
   {
     title: 'Operațiuni',
+    roles: ['admin', 'manager', 'operator'],
     items: [
-      { text: 'Produse', icon: <InventoryIcon />, path: '/products' },
-      { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders' },
-      { text: 'Picking', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs' },
-      { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments' },
+      { text: 'Produse', icon: <InventoryIcon />, path: '/products', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Picking', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments', roles: ['admin', 'manager', 'operator'] },
       // Opțiuni suplimentare (rămân vizibile, dar grupate)
-      { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches' },
-      { text: 'Transformări', icon: <TransformIcon />, path: '/transformations' },
-      { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan' },
-      { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting' },
-      { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing' },
-      { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc' },
+      { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Transformări', icon: <TransformIcon />, path: '/transformations', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc', roles: ['admin', 'manager', 'operator'] },
     ],
   },
 ];
@@ -109,9 +116,22 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
       <Divider />
 
       {/* Grouped sections */}
-      {menuGroups.map((group) => (
+      {menuGroups
+        // filter groups by role (group-level and at least one visible item)
+        .filter((group) => {
+          const role = (user?.role || 'operator') as Role;
+          const groupAllowed = !group.roles || group.roles.includes(role);
+          const hasVisibleItem = group.items.some((it) => !it.roles || it.roles.includes(role));
+          return groupAllowed && hasVisibleItem;
+        })
+        .map((group) => (
         <List key={group.title} subheader={<ListSubheader sx={{ bgcolor: 'transparent', color: '#fff' }}>{group.title}</ListSubheader>}>
-          {group.items.map((item) => (
+          {group.items
+            .filter((item) => {
+              const role = (user?.role || 'operator') as Role;
+              return !item.roles || item.roles.includes(role);
+            })
+            .map((item) => (
             <ListItem key={item.text} disablePadding>
               <ListItemButton
                 selected={location.pathname === item.path}

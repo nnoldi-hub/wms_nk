@@ -43,7 +43,7 @@ function App() {
             <Route
               path="/orders"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <OrdersPage />
                   </Layout>
@@ -53,7 +53,7 @@ function App() {
             <Route
               path="/products"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <ProductsPage />
                   </Layout>
@@ -63,7 +63,7 @@ function App() {
             <Route
               path="/utilizatori"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin']}>
                   <Layout>
                     <UsersPage />
                   </Layout>
@@ -73,7 +73,7 @@ function App() {
             <Route
               path="/cutting"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <CuttingOrdersPage />
                   </Layout>
@@ -83,7 +83,7 @@ function App() {
             <Route
               path="/sewing"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <SewingOrdersPage />
                   </Layout>
@@ -93,7 +93,7 @@ function App() {
             <Route
               path="/qc"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <QCInspectionsPage />
                   </Layout>
@@ -103,7 +103,7 @@ function App() {
             <Route
               path="/batches"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <BatchesPage />
                   </Layout>
@@ -113,7 +113,7 @@ function App() {
             <Route
               path="/transformations"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <TransformationsPage />
                   </Layout>
@@ -123,7 +123,7 @@ function App() {
             <Route
               path="/scan"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <ScanPage />
                   </Layout>
@@ -133,7 +133,7 @@ function App() {
             <Route
               path="/initial-setup"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager']}>
                   <Layout>
                     <InitialSetupPage />
                   </Layout>
@@ -143,7 +143,7 @@ function App() {
             <Route
               path="/shipments"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <ShipmentsPage />
                   </Layout>
@@ -153,7 +153,7 @@ function App() {
             <Route
               path="/reports"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager']}>
                   <Layout>
                     <ReportsPage />
                   </Layout>
@@ -163,7 +163,7 @@ function App() {
             <Route
               path="/warehouse-config"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager']}>
                   <Layout>
                     <WarehouseConfigPage />
                   </Layout>
@@ -173,7 +173,7 @@ function App() {
             <Route
               path="/pick-jobs"
               element={
-                <ProtectedRoute>
+                <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <PickJobsPage />
                   </Layout>
