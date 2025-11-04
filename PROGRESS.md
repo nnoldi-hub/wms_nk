@@ -1,7 +1,7 @@
 # WMS-NKS Development Progress Report
-**Last Updated:** November 3, 2025  
-**Version:** 2.2.0 🎉  
-**Status:** 🚀 Orders CSV + Picking Workflow MVP complete; labels & staging added
+**Last Updated:** November 4, 2025  
+**Version:** 2.2.1 🎉  
+**Status:** 🚀 Orders CSV + Picking Workflow MVP complete; labels & staging added; UI navigation grouped with RBAC
 
 ---
 
@@ -514,6 +514,46 @@ Implemented consistently across all entities:
 
 **Session Duration:** ~2 hours  
 **Status:** 🎉 **100% COMPLETE - ALL FEATURES WORKING!**
+
+---
+
+## 🔔 Latest Session: Navigation overhaul + RBAC + Collapsible groups (Nov 4, 2025)
+
+### 🎯 What we shipped
+- Sidebar navigation reorganized to match the wireframe and improve UX
+  - Groups: Admin, Operațiuni, Producție
+  - “Picking” now visible under Operațiuni (link: `/pick-jobs`)
+- Role-based access (RBAC) for menu visibility and routes
+  - Menu items/groups filtered by role: `admin`, `manager`, `operator`
+  - ProtectedRoute enhanced to accept `roles` and block deep links
+  - Rules applied:
+    - Admin: Setări, Configurare Depozit, Rapoarte → `admin|manager`; Utilizatori → `admin`
+    - Operațiuni: Produse, Comenzi, Picking, Expedieri, Batches, Transformări, Scanare → toate rolurile
+    - Producție: Croitorie, Cusut, Control Calitate → toate rolurile
+- Collapsible (accordion) groups with persisted state
+  - Expand/collapse stored in `localStorage` and auto-opens for current route
+
+### 🧩 Files updated
+- Web UI
+  - `frontend/web_ui/src/components/Layout.tsx` – grouped & RBAC menu, collapsible groups with persistence
+  - `frontend/web_ui/src/components/ProtectedRoute.tsx` – `roles[]` support and redirect to `/dashboard` when unauthorized
+  - `frontend/web_ui/src/App.tsx` – roles per route configured
+- Docs
+  - `meniu.md` – updated structure and notes (retractable groups)
+
+### 🧪 Quality gates (Nov 4)
+- Build: PASS (Vite + TS)
+- Lint/Typecheck: PASS
+
+### ✅ Commits
+- UI: Grupa meniul + adaugă Picking sub Operațiuni; RBAC pentru meniu & rute; grupuri retractabile + memorie locală
+
+### 🗺️ What remains / Next
+- Optional
+  - Add date_from/date_to filters on Transformări (server + UI)
+  - Fine-tune RBAC (ex.: Producție doar operator+manager) dacă se dorește
+  - CI build for web UI and basic e2e smoke (menu visibility per role)
+  - Chunking improvements (split large JS bundle)
 
 ---
 
