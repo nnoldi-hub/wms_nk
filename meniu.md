@@ -14,6 +14,11 @@ Aceasta este organizarea meniului din aplicația Admin, conform schiței propuse
 - Comenzi
 - Picking
 - Expedieri
+### Producție
+- Croitorie
+- Cusut
+- Control Calitate
+
 
 Notă: sub „Comenzi” putem include legături către fluxurile conectate (de ex. „Picking/Pick Jobs”) fără a încărca navigarea principală.
 

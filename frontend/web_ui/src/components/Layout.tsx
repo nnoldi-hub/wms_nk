@@ -53,6 +53,12 @@ const menuGroups: MenuGroupDef[] = [
       { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches', roles: ['admin', 'manager', 'operator'] },
       { text: 'Transformări', icon: <TransformIcon />, path: '/transformations', roles: ['admin', 'manager', 'operator'] },
       { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan', roles: ['admin', 'manager', 'operator'] },
+    ],
+  },
+  {
+    title: 'Producție',
+    roles: ['admin', 'manager', 'operator'],
+    items: [
       { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting', roles: ['admin', 'manager', 'operator'] },
       { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing', roles: ['admin', 'manager', 'operator'] },
       { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc', roles: ['admin', 'manager', 'operator'] },
