@@ -1,4 +1,4 @@
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, AppBar, IconButton, Typography, Avatar, Menu, MenuItem, ListSubheader, Divider } from '@mui/material';
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, AppBar, IconButton, Typography, Avatar, Menu, MenuItem, ListSubheader, Divider, Collapse } from '@mui/material';
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -12,6 +12,8 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import ViewModuleIcon from '@mui/icons-material/ViewModule';
 import TransformIcon from '@mui/icons-material/Transform';
 import MenuIcon from '@mui/icons-material/Menu';
+import ExpandLess from '@mui/icons-material/ExpandLess';
+import ExpandMore from '@mui/icons-material/ExpandMore';
 import SettingsApplicationsIcon from '@mui/icons-material/SettingsApplications';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
 import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
@@ -68,6 +70,14 @@ const menuGroups: MenuGroupDef[] = [
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(() => {
+    try {
+      const stored = localStorage.getItem('menu.openGroups');
+      return stored ? JSON.parse(stored) : {};
+    } catch {
+      return {};
+    }
+  });
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
@@ -130,32 +140,47 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           const hasVisibleItem = group.items.some((it) => !it.roles || it.roles.includes(role));
           return groupAllowed && hasVisibleItem;
         })
-        .map((group) => (
-        <List key={group.title} subheader={<ListSubheader sx={{ bgcolor: 'transparent', color: '#fff' }}>{group.title}</ListSubheader>}>
-          {group.items
-            .filter((item) => {
-              const role = (user?.role || 'operator') as Role;
-              return !item.roles || item.roles.includes(role);
-            })
-            .map((item) => (
-            <ListItem key={item.text} disablePadding>
-              <ListItemButton
-                selected={location.pathname === item.path}
-                onClick={() => navigate(item.path)}
-                sx={{
-                  '&.Mui-selected': {
-                    backgroundColor: 'rgba(25, 118, 210, 0.12)',
-                    borderLeft: '4px solid #1976d2',
-                  },
-                }}
-              >
-                <ListItemIcon sx={{ color: '#fff' }}>{item.icon}</ListItemIcon>
-                <ListItemText primary={item.text} sx={{ color: '#fff' }} />
-              </ListItemButton>
-            </ListItem>
-          ))}
-        </List>
-      ))}
+        .map((group) => {
+          const role = (user?.role || 'operator') as Role;
+          const visibleItems = group.items.filter((it) => !it.roles || it.roles.includes(role));
+          const isOpen = (openGroups[group.title] ?? visibleItems.some(i => i.path === location.pathname));
+          return (
+            <List key={group.title} sx={{ pt: 0 }}>
+              <ListSubheader sx={{ bgcolor: 'transparent', color: '#fff', px: 2 }}>
+                <ListItemButton onClick={() => setOpenGroups((prev) => {
+                  const next = { ...prev, [group.title]: !isOpen };
+                  try { localStorage.setItem('menu.openGroups', JSON.stringify(next)); } catch { /* ignore localStorage errors */ }
+                  return next;
+                })} sx={{ color: '#fff', px: 0 }}>
+                  <ListItemText primary={group.title} />
+                  {isOpen ? <ExpandLess sx={{ color: '#fff' }} /> : <ExpandMore sx={{ color: '#fff' }} />}
+                </ListItemButton>
+              </ListSubheader>
+              <Collapse in={isOpen} timeout="auto" unmountOnExit>
+                <List disablePadding>
+                  {visibleItems.map((item) => (
+                    <ListItem key={item.text} disablePadding>
+                      <ListItemButton
+                        selected={location.pathname === item.path}
+                        onClick={() => navigate(item.path)}
+                        sx={{
+                          pl: 2,
+                          '&.Mui-selected': {
+                            backgroundColor: 'rgba(25, 118, 210, 0.12)',
+                            borderLeft: '4px solid #1976d2',
+                          },
+                        }}
+                      >
+                        <ListItemIcon sx={{ color: '#fff' }}>{item.icon}</ListItemIcon>
+                        <ListItemText primary={item.text} sx={{ color: '#fff' }} />
+                      </ListItemButton>
+                    </ListItem>
+                  ))}
+                </List>
+              </Collapse>
+            </List>
+          );
+        })}
     </div>
   );
 

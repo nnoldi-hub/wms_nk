@@ -44,6 +44,6 @@ Secțiune dedesubt:
 - Utilizatori: `/users`
 
 ## Observații
-- Grupele „Admin” și „Operațiuni” sunt extensibile (accordion) pentru a păstra meniul aerisit.
+- Grupele „Admin”, „Operațiuni” și „Producție” sunt retractabile (accordion) pentru a păstra meniul aerisit; starea de deschidere/închidere se memorează local.
 - Vizibilitatea elementelor poate fi filtrată pe rol (admin, operator, manager).
 - Dacă „Picking” trebuie să apară în meniul din stânga, plasează-l sub „Operațiuni”, imediat după „Comenzi”.
