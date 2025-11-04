@@ -12,6 +12,7 @@ Aceasta este organizarea meniului din aplicația Admin, conform schiței propuse
 ### Operațiuni
 - Produse
 - Comenzi
+- Picking
 - Expedieri
 
 Notă: sub „Comenzi” putem include legături către fluxurile conectate (de ex. „Picking/Pick Jobs”) fără a încărca navigarea principală.
@@ -31,7 +32,7 @@ Secțiune dedesubt:
 - Dashboard: `/dashboard`
 - Produse: `/products`
 - Comenzi: `/orders`
-- Picking (legat de Comenzi): `/pick-jobs`
+- Picking: `/pick-jobs`
 - Expedieri: `/shipments`
 - Setări: `/settings`
 - Configurare Depozit: `/warehouse/config`

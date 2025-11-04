@@ -1,4 +1,4 @@
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, AppBar, IconButton, Typography, Avatar, Menu, MenuItem } from '@mui/material';
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, AppBar, IconButton, Typography, Avatar, Menu, MenuItem, ListSubheader, Divider } from '@mui/material';
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -19,22 +19,38 @@ import { useAuth } from '../hooks/useAuth';
 
 const drawerWidth = 260;
 
-const menuItems = [
+// Top-level quick link (optional)
+const menuTop = [
   { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-  { text: 'Produse', icon: <InventoryIcon />, path: '/products' },
-    { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders' },
-  { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches' },
-  { text: 'Transformari', icon: <TransformIcon />, path: '/transformations' },
-  { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan' },
-  { text: 'Setare Inițială', icon: <SettingsApplicationsIcon />, path: '/initial-setup' },
-  { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config' },
-  { text: 'Pick Jobs', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs' },
-  { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting' },
-  { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing' },
-  { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc' },
-  { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments' },
-  { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori' },
-  { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports' },
+];
+
+// Grouped navigation matching the new sidebar layout
+const menuGroups = [
+  {
+    title: 'Admin',
+    items: [
+      { text: 'Setări', icon: <SettingsApplicationsIcon />, path: '/initial-setup' },
+      { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config' },
+      { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori' },
+      { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports' },
+    ],
+  },
+  {
+    title: 'Operațiuni',
+    items: [
+      { text: 'Produse', icon: <InventoryIcon />, path: '/products' },
+      { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders' },
+      { text: 'Picking', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs' },
+      { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments' },
+      // Opțiuni suplimentare (rămân vizibile, dar grupate)
+      { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches' },
+      { text: 'Transformări', icon: <TransformIcon />, path: '/transformations' },
+      { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan' },
+      { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting' },
+      { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing' },
+      { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc' },
+    ],
+  },
 ];
 
 export const Layout = ({ children }: { children: React.ReactNode }) => {
@@ -68,25 +84,52 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
           WMS NK Admin
         </Typography>
       </Toolbar>
-      <List>
-        {menuItems.map((item) => (
-          <ListItem key={item.text} disablePadding>
-            <ListItemButton
-              selected={location.pathname === item.path}
-              onClick={() => navigate(item.path)}
-              sx={{
-                '&.Mui-selected': {
-                  backgroundColor: 'rgba(25, 118, 210, 0.12)',
-                  borderLeft: '4px solid #1976d2',
-                },
-              }}
-            >
-              <ListItemIcon sx={{ color: '#fff' }}>{item.icon}</ListItemIcon>
-              <ListItemText primary={item.text} sx={{ color: '#fff' }} />
-            </ListItemButton>
-          </ListItem>
-        ))}
-      </List>
+      {/* Top quick links */}
+      {menuTop.length > 0 && (
+        <List>
+          {menuTop.map((item) => (
+            <ListItem key={item.text} disablePadding>
+              <ListItemButton
+                selected={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+                sx={{
+                  '&.Mui-selected': {
+                    backgroundColor: 'rgba(25, 118, 210, 0.12)',
+                    borderLeft: '4px solid #1976d2',
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ color: '#fff' }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} sx={{ color: '#fff' }} />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+      )}
+      <Divider />
+
+      {/* Grouped sections */}
+      {menuGroups.map((group) => (
+        <List key={group.title} subheader={<ListSubheader sx={{ bgcolor: 'transparent', color: '#fff' }}>{group.title}</ListSubheader>}>
+          {group.items.map((item) => (
+            <ListItem key={item.text} disablePadding>
+              <ListItemButton
+                selected={location.pathname === item.path}
+                onClick={() => navigate(item.path)}
+                sx={{
+                  '&.Mui-selected': {
+                    backgroundColor: 'rgba(25, 118, 210, 0.12)',
+                    borderLeft: '4px solid #1976d2',
+                  },
+                }}
+              >
+                <ListItemIcon sx={{ color: '#fff' }}>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} sx={{ color: '#fff' }} />
+              </ListItemButton>
+            </ListItem>
+          ))}
+        </List>
+      ))}
     </div>
   );
 
@@ -109,7 +152,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             <MenuIcon />
           </IconButton>
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
-            {menuItems.find(item => item.path === location.pathname)?.text || 'Dashboard'}
+            {
+              // Determine current page title from top or grouped items
+              (menuTop.find(item => item.path === location.pathname) ||
+               menuGroups.flatMap(g => g.items).find(item => item.path === location.pathname))?.text ||
+              'Dashboard'
+            }
           </Typography>
           <IconButton onClick={handleMenuOpen}>
             <Avatar sx={{ bgcolor: '#1976d2' }}>
