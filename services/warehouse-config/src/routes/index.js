@@ -168,6 +168,9 @@ router.delete('/locations/:id',
 // GET /api/v1/locations/:id/barcode - Generate barcode for location
 router.get('/locations/:id/barcode', locationController.generateBarcode);
 
+// PATCH /api/v1/locations/:id/coordinates - Actualizare coordonate (Sprint 8)
+router.patch('/locations/:id/coordinates', managerOrAdmin, locationController.patchCoordinates);
+
 // ============================================================================
 // LOCATION TYPE ROUTES
 // ============================================================================

@@ -8,6 +8,7 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import warehouseConfigService from '../services/warehouseConfig.service';
 import { RulesTab } from '../components/RulesTab';
+import { WarehouseMapTab } from '../components/WarehouseMapTab';
 
 interface HealthResponse {
   status: string;
@@ -511,10 +512,19 @@ export function WarehouseConfigPage() {
       <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
         <Tab label="Depozit & Locații" />
         <Tab label="Reguli WMS" />
+        <Tab label="🗺 Hartă Depozit" />
       </Tabs>
 
       {/* ── Tab 1: Reguli WMS ── */}
       {mainTab === 1 && <RulesTab />}
+
+      {/* ── Tab 2: Hartă vizuală ── */}
+      {mainTab === 2 && (
+        <WarehouseMapTab
+          warehouseId={selectedWarehouseId}
+          zones={(zones as { id: string; zone_name: string; zone_code: string; zone_type?: string }[])}
+        />
+      )}
 
       {/* ── Tab 0: Config Depozit (conținut existent) ── */}
       {mainTab === 0 && <Box>

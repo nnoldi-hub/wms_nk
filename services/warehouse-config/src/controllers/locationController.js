@@ -318,6 +318,34 @@ class LocationController {
     }
   }
 
+  // Patch coordinates for a single location (Sprint 8)
+  async patchCoordinates(req, res, next) {
+    try {
+      const { id } = req.params;
+      const { coord_x, coord_y, coord_z, path_cost } = req.body;
+
+      const exists = await db.query('SELECT id FROM locations WHERE id = $1', [id]);
+      if (exists.rows.length === 0) {
+        return res.status(404).json({ error: 'Location not found' });
+      }
+
+      const result = await db.query(
+        `UPDATE locations
+         SET coord_x = $1, coord_y = $2, coord_z = COALESCE($3, coord_z, 0),
+             path_cost = COALESCE($4, path_cost, 1), updated_at = CURRENT_TIMESTAMP
+         WHERE id = $5
+         RETURNING id, location_code, coord_x, coord_y, coord_z, path_cost`,
+        [coord_x ?? null, coord_y ?? null, coord_z ?? null, path_cost ?? null, id]
+      );
+
+      await cache.invalidatePrefix(cache.prefixes.locations);
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+      logger.error('Patch coordinates error:', error);
+      next(error);
+    }
+  }
+
   // Generate barcode for location
   async generateBarcode(req, res, next) {
     try {

@@ -78,6 +78,10 @@ export const warehouseConfigService = {
     const { data } = await wcClient.put(`/api/v1/locations/${locationId}`, payload);
     return data;
   },
+  async patchLocationCoordinates(locationId: string, coords: { coord_x: number | null; coord_y: number | null; coord_z?: number; path_cost?: number }) {
+    const { data } = await wcClient.patch(`/api/v1/locations/${locationId}/coordinates`, coords);
+    return data;
+  },
   // --- Mutations for quick setup ---
   async createWarehouse(payload: {
     warehouse_code: string; warehouse_name: string; company_name: string;
