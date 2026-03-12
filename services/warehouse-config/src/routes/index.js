@@ -368,6 +368,8 @@ router.delete('/warehouse-settings/:id', adminOnly, warehouseSettingsController.
 // RULE ENGINE ROUTES
 // ============================================================================
 const ruleController = require('../controllers/ruleController');
+const auditController = require('../controllers/auditController');
+const reportsController = require('../controllers/reportsController');
 
 // GET  /api/v1/rules                 - listare reguli (filtrare ?scope=PICKING&is_active=true)
 router.get('/rules', ruleController.getAll);
@@ -378,6 +380,9 @@ router.get('/rules/:id', ruleController.getById);
 // POST /api/v1/rules                 - creare regulă nouă (Manager/Admin)
 router.post('/rules', managerOrAdmin, ruleController.create);
 
+// PUT  /api/v1/rules/reorder         - reordonare prioritate en-masse (Manager/Admin)
+router.put('/rules/reorder', managerOrAdmin, reportsController.reorderRules);
+
 // PUT  /api/v1/rules/:id             - editare regulă (Manager/Admin)
 router.put('/rules/:id', managerOrAdmin, ruleController.update);
 
@@ -387,10 +392,37 @@ router.delete('/rules/:id', adminOnly, ruleController.remove);
 // POST /api/v1/rules/evaluate        - testare manuală set de reguli față de un context
 router.post('/rules/evaluate', managerOrAdmin, ruleController.evaluate);
 
+// ─── Audit Log ──────────────────────────────────────────────────────────────
+
+// GET  /api/v1/rules/audit-log       - log audit cu filtrare + paginare
+router.get('/rules/audit-log', managerOrAdmin, auditController.list);
+
+// GET  /api/v1/rules/audit-log/stats - statistici audit (by operation, top rules, blocked)
+router.get('/rules/audit-log/stats', managerOrAdmin, auditController.stats);
+
+// POST /api/v1/rules/audit-log       - inserare manuală (pentru servicii externe)
+router.post('/rules/audit-log', managerOrAdmin, auditController.create);
+
+// ─── Sugestii ────────────────────────────────────────────────────────────────
+
 // POST /api/v1/suggest/putaway       - sugestie locație la recepție
 router.post('/suggest/putaway', ruleController.suggestPutaway);
 
 // POST /api/v1/suggest/picking       - sugestie stoc optim pentru o linie de picking
 router.post('/suggest/picking', ruleController.suggestPicking);
+
+// POST /api/v1/suggest/cutting       - plan de tăiere optim pentru o comandă
+router.post('/suggest/cutting', reportsController.suggestCutting);
+
+// ─── Rapoarte Rule Engine ────────────────────────────────────────────────────
+
+// GET /api/v1/reports/rule-engine/picking-efficiency
+router.get('/reports/rule-engine/picking-efficiency', managerOrAdmin, reportsController.pickingEfficiency);
+
+// GET /api/v1/reports/rule-engine/underused-locations
+router.get('/reports/rule-engine/underused-locations', managerOrAdmin, reportsController.underusedLocations);
+
+// GET /api/v1/reports/rule-engine/large-remnants
+router.get('/reports/rule-engine/large-remnants', managerOrAdmin, reportsController.largeRemnants);
 
 module.exports = router;

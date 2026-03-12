@@ -138,18 +138,20 @@
 ---
 
 ## SPRINT 5 — Reguli Avansate & Rapoarte
-> **Durată estimată:** 3-4 zile | **Status:** ⬜ Neînceput
+> **Durată estimată:** 3-4 zile | **Status:** ✅ COMPLET
 
 ### Reguli avansate
-- [ ] Reguli pentru tăiere (cutting) — ce strategie de tăiat când comandă cere X metru
-- [ ] Reguli pentru UM (conversii automate metru ↔ bucăți ↔ kg)
-- [ ] Reguli de blocare — BLOCK_OPERATION dacă condiție nu e îndeplinită
-- [ ] Audit log reguli — ce regulă a decis ce, când
+- [x] Reguli pentru tăiere (cutting) — `cuttingEngine.js` cu strategii MINIMIZE_WASTE, FEWEST_CUTS, USE_REMAINS_FIRST, FIFO
+- [x] Reguli pentru UM (conversii automate metru ↔ bucăți ↔ kg) — `convertToMeters` / `convertFromMeters` în cuttingEngine
+- [x] Reguli de blocare — `enforceBlockOperation()` în ruleEngine.js returnează 422 cu `blocked: true`
+- [x] Audit log reguli — tabel `wms_rule_audit_log` (migration 024) + `auditController.js`
 
 ### Rapoarte
-- [ ] Raport "Eficiență picking" — câte reguli MIN_WASTE vs FIFO aplicate
-- [ ] Raport "Locații sub-utilizate" — locații goale > 30 zile
-- [ ] Raport "Resturi mari" — loturi parțiale > X metrii neutilizate
+- [x] Raport "Eficiență picking" — `GET /api/v1/reports/rule-engine/picking-efficiency` + tab frontend
+- [x] Raport "Locații sub-utilizate" — `GET /api/v1/reports/rule-engine/underused-locations` + tab frontend
+- [x] Raport "Resturi mari" — `GET /api/v1/reports/rule-engine/large-remnants` + tab frontend
+- [x] Audit Log viewer — tab 4 în ReportsPage.tsx cu filtre pe operationType
+- [x] Reordonare prioritate reguli — dialog cu butoane ↑/↓ în RulesTab.tsx → `PUT /api/v1/rules/reorder`
 
 ---
 
@@ -230,8 +232,8 @@ PICKING Flow
 
 | Sprint | Descriere | Status |
 |--------|-----------|--------|
-| Sprint 1 | Fundație DB + Rule Engine | 🔄 În progres |
-| Sprint 2 | API Sugestii & Integrare Picking | ⬜ Neînceput |
-| Sprint 3 | UI Admin Motor de Reguli | ⬜ Neînceput |
+| Sprint 1 | Fundație DB + Rule Engine | ✅ COMPLET |
+| Sprint 2 | API Sugestii & Integrare Picking | ✅ COMPLET |
+| Sprint 3 | UI Admin Motor de Reguli | ✅ COMPLET |
 | Sprint 4 | Mobile Recepție / Putaway | ✅ COMPLET |
-| Sprint 5 | Reguli Avansate & Rapoarte | ⬜ Neînceput |
+| Sprint 5 | Reguli Avansate & Rapoarte | ✅ COMPLET |

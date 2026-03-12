@@ -11,6 +11,9 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
+import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import warehouseConfigService from '../services/warehouseConfig.service';
 
 // ─── Tipuri ──────────────────────────────────────────────────────────────────
@@ -107,6 +110,9 @@ export function RulesTab() {
   const [evalContext, setEvalContext] = useState('{\n  "product": {"category": "cable"},\n  "stock": {"lot_status": "INTACT"},\n  "location": {}\n}');
   const [evalResult, setEvalResult] = useState<Record<string, unknown> | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<WmsRule | null>(null);
+  const [openReorder, setOpenReorder] = useState(false);
+  const [reorderList, setReorderList] = useState<WmsRule[]>([]);
+  const [reorderSaving, setReorderSaving] = useState(false);
 
   const scopesList = ['ALL', ...SCOPES];
 
@@ -225,6 +231,35 @@ export function RulesTab() {
     }
   };
 
+  const openReorderDialog = () => {
+    const sorted = [...rules].sort((a, b) => a.priority - b.priority);
+    setReorderList(sorted);
+    setOpenReorder(true);
+  };
+
+  const moveRule = (index: number, direction: -1 | 1) => {
+    const newList = [...reorderList];
+    const target = index + direction;
+    if (target < 0 || target >= newList.length) return;
+    [newList[index], newList[target]] = [newList[target], newList[index]];
+    setReorderList(newList);
+  };
+
+  const saveReorder = async () => {
+    setReorderSaving(true);
+    try {
+      const updates = reorderList.map((r, i) => ({ id: r.id, priority: (i + 1) * 10 }));
+      await warehouseConfigService.reorderRules(updates);
+      setSuccess('Priorități actualizate');
+      setOpenReorder(false);
+      await loadRules();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setReorderSaving(false);
+    }
+  };
+
   const handleEvaluate = async () => {
     if (!evalRule) return;
     try {
@@ -301,6 +336,9 @@ export function RulesTab() {
           {scopesList.map((s) => <Tab key={s} label={s} />)}
         </Tabs>
         <Box sx={{ flexGrow: 1 }} />
+        <Button variant="outlined" startIcon={<FormatListNumberedIcon />} onClick={openReorderDialog}>
+          Reordonează
+        </Button>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           Regulă Nouă
         </Button>
@@ -498,6 +536,47 @@ export function RulesTab() {
           <Button onClick={() => setDeleteConfirm(null)}>Anulează</Button>
           <Button color="error" variant="contained" onClick={() => deleteConfirm && handleDelete(deleteConfirm)}>
             Șterge
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Dialog reordonare priorități ── */}
+      <Dialog open={openReorder} onClose={() => setOpenReorder(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Reordonează Priorități Reguli</DialogTitle>
+        <DialogContent>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+            Folosește săgețile pentru a schimba ordinea. Prioritatea va fi recalculată automat (10, 20, 30, ...).
+          </Typography>
+          <Stack spacing={1}>
+            {reorderList.map((rule, i) => (
+              <Box
+                key={rule.id}
+                sx={{
+                  display: 'flex', alignItems: 'center', gap: 1,
+                  p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1,
+                  bgcolor: rule.is_active ? 'inherit' : 'action.hover',
+                }}
+              >
+                <Typography variant="caption" color="text.secondary" sx={{ width: 28, textAlign: 'right', flexShrink: 0 }}>
+                  {(i + 1) * 10}
+                </Typography>
+                <Chip label={rule.scope} size="small" color={SCOPE_COLORS[rule.scope] || 'default'} sx={{ flexShrink: 0 }} />
+                <Typography variant="body2" sx={{ flex: 1 }}>{rule.name}</Typography>
+                {!rule.is_active && <Chip label="inactiv" size="small" variant="outlined" />}
+                <IconButton size="small" onClick={() => moveRule(i, -1)} disabled={i === 0}>
+                  <ArrowUpwardIcon fontSize="small" />
+                </IconButton>
+                <IconButton size="small" onClick={() => moveRule(i, 1)} disabled={i === reorderList.length - 1}>
+                  <ArrowDownwardIcon fontSize="small" />
+                </IconButton>
+              </Box>
+            ))}
+          </Stack>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenReorder(false)}>Anulează</Button>
+          <Button variant="contained" onClick={saveReorder} disabled={reorderSaving}>
+            {reorderSaving ? 'Salvez...' : 'Salvează Ordinea'}
           </Button>
         </DialogActions>
       </Dialog>

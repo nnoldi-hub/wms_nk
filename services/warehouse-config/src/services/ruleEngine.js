@@ -239,6 +239,40 @@ function validateLocationForProduct(location, { productCategory, packagingType }
   return { valid: true, reason: null };
 }
 
+// ─── BLOCK_OPERATION checker ─────────────────────────────────────────────────
+
+/**
+ * Verifică dacă printre acțiunile rezultate există BLOCK_OPERATION.
+ * Dacă da, aruncă o eroare cu mesajul specificat în acțiune.
+ *
+ * @param {Array} actions - lista de acțiuni din applyRules
+ * @param {string} [defaultMsg] - mesaj fallback
+ * @throws {Error} dacă operațiunea e blocată
+ */
+function enforceBlockOperation(actions, defaultMsg = 'Operațiunea a fost blocată de o regulă WMS.') {
+  const block = actions.find(a => a.type === 'BLOCK_OPERATION');
+  if (block) {
+    const err = new Error(block.value || defaultMsg);
+    err.code = 'RULE_BLOCK';
+    err.rule = block.from_rule;
+    throw err;
+  }
+}
+
+/**
+ * Verifică dacă e necesară aprobare manager (REQUIRE_APPROVAL).
+ * @param {Array} actions
+ * @returns {{ required: boolean, reason: string|null }}
+ */
+function checkRequireApproval(actions) {
+  const approval = actions.find(a => a.type === 'REQUIRE_APPROVAL');
+  return {
+    required: !!approval,
+    reason: approval ? (approval.value || 'Aprobare necesară') : null,
+    from_rule: approval ? approval.from_rule : null,
+  };
+}
+
 // ─── Export ───────────────────────────────────────────────────────────────────
 
 module.exports = {
@@ -249,5 +283,7 @@ module.exports = {
   hasAction,
   buildContext,
   validateLocationForProduct,
+  enforceBlockOperation,
+  checkRequireApproval,
   OPERATORS,
 };

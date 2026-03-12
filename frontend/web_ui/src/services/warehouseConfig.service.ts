@@ -181,6 +181,38 @@ export const warehouseConfigService = {
     const { data } = await wcClient.post('/api/v1/suggest/putaway', payload);
     return data;
   },
+  async suggestCutting(payload: { product_sku: string; requested_qty: number; uom: string; warehouse_id?: string; product?: Record<string, unknown> }) {
+    const { data } = await wcClient.post('/api/v1/suggest/cutting', payload);
+    return data;
+  },
+  async reorderRules(updates: Array<{ id: string; priority: number }>) {
+    const { data } = await wcClient.put('/api/v1/rules/reorder', updates);
+    return data;
+  },
+
+  // --- Reports: Rule Engine ---
+  async reportPickingEfficiency(params?: { from?: string; to?: string }) {
+    const { data } = await wcClient.get('/api/v1/reports/rule-engine/picking-efficiency', { params });
+    return data;
+  },
+  async reportUnderusedLocations(params?: { days?: number; warehouse_id?: string; limit?: number }) {
+    const { data } = await wcClient.get('/api/v1/reports/rule-engine/underused-locations', { params });
+    return data;
+  },
+  async reportLargeRemnants(params?: { min_meters?: number; max_percent?: number; inactive_days?: number; limit?: number }) {
+    const { data } = await wcClient.get('/api/v1/reports/rule-engine/large-remnants', { params });
+    return data;
+  },
+
+  // --- Audit Log ---
+  async listAuditLog(params?: { operation_type?: string; rule_id?: string; blocked?: boolean; from?: string; to?: string; limit?: number; offset?: number }) {
+    const { data } = await wcClient.get('/api/v1/rules/audit-log', { params });
+    return data;
+  },
+  async auditLogStats(params?: { from?: string; to?: string }) {
+    const { data } = await wcClient.get('/api/v1/rules/audit-log/stats', { params });
+    return data;
+  },
 };
 
 export default warehouseConfigService;
