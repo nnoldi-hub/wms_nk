@@ -21,6 +21,7 @@ import { ReportsPage } from './pages/ReportsPage';
 import { WarehouseConfigPage } from './pages/WarehouseConfigPage';
 import PickJobsPage from './pages/PickJobsPage';
 import { StocImportPage } from './pages/StocImportPage';
+import QRLocationsPage from './pages/QRLocationsPage';
 import theme from './theme';
 
 function App() {
@@ -187,6 +188,16 @@ function App() {
                 <ProtectedRoute roles={['admin','manager']}>
                   <Layout>
                     <StocImportPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/qr-locatii"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <QRLocationsPage />
                   </Layout>
                 </ProtectedRoute>
               }

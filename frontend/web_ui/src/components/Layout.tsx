@@ -18,6 +18,7 @@ import SettingsApplicationsIcon from '@mui/icons-material/SettingsApplications';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
 import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
 import { useAuth } from '../hooks/useAuth';
 
 const drawerWidth = 260;
@@ -42,6 +43,7 @@ const menuGroups: MenuGroupDef[] = [
       { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config', roles: ['admin', 'manager'] },
       { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori', roles: ['admin'] },
       { text: 'Import Stoc Inițial', icon: <FileUploadIcon />, path: '/import-stoc', roles: ['admin', 'manager'] },
+      { text: 'QR Coduri Locații', icon: <QrCode2Icon />, path: '/qr-locatii', roles: ['admin', 'manager'] },
       { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports', roles: ['admin', 'manager'] },
     ],
   },
