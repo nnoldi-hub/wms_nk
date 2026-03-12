@@ -123,7 +123,7 @@ export function StocImportPage() {
       if (rows.length === 0) throw new Error('CSV gol sau format nerecunoscut');
 
       // Trimite la backend pentru parsare lot + SKU
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const { data } = await axios.post(
         `${INVENTORY_API}/api/v1/import-stoc-cabluri/preview`,
         { rows },
@@ -157,7 +157,7 @@ export function StocImportPage() {
     setImporting(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
+      const token = localStorage.getItem('accessToken');
       const formData = new FormData();
       formData.append('file', file);
 

@@ -161,17 +161,15 @@ class StocCabluriController {
         try {
           // Upsert produs
           const prodInsert = await client.query(
-            `INSERT INTO products (sku, name, uom, category, description)
-             VALUES ($1, $2, 'METER', $3, $4)
+            `INSERT INTO products (sku, name, uom, description, lot_control)
+             VALUES ($1, $2, 'METER', $3, true)
              ON CONFLICT (sku) DO UPDATE
-               SET name = EXCLUDED.name,
-                   category = COALESCE(EXCLUDED.category, products.category)
+               SET name = EXCLUDED.name
              RETURNING (xmax = 0) AS inserted`,
             [
               row.sku,
               row.name,
-              row.product_type,
-              `Import stoc inițial — ${row.lot.packaging_type || 'necunoscut'}${row.lot.manufacturer ? ' / ' + row.lot.manufacturer : ''}`,
+              `Tip: ${row.product_type} | Import stoc inițial — ${row.lot.packaging_type || 'necunoscut'}${row.lot.manufacturer ? ' / ' + row.lot.manufacturer : ''}`,
             ]
           );
           if (prodInsert.rows[0]?.inserted) createdProducts++;
