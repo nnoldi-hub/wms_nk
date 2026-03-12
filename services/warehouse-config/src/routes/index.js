@@ -398,8 +398,14 @@ router.put('/rules/:id', managerOrAdmin, ruleController.update);
 // DELETE /api/v1/rules/:id           - ștergere regulă (Admin)
 router.delete('/rules/:id', adminOnly, ruleController.remove);
 
-// POST /api/v1/rules/evaluate        - testare manuală set de reguli față de un context
+// POST /api/v1/rules/evaluate         - testare manuală set de reguli față de un context
 router.post('/rules/evaluate', managerOrAdmin, ruleController.evaluate);
+
+// POST /api/v1/rules/simulate          - playground detaliat cu rezultat per condiție
+router.post('/rules/simulate', managerOrAdmin, ruleController.simulate);
+
+// GET  /api/v1/rules/detect-conflicts  - detectare conflicte între reguli active
+router.get('/rules/detect-conflicts', managerOrAdmin, ruleController.detectConflicts);
 
 // ─── Audit Log ──────────────────────────────────────────────────────────────
 

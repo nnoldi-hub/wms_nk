@@ -201,6 +201,14 @@ export const warehouseConfigService = {
     const { data } = await wcClient.post(`/api/v1/rules/${id}/restore/${version}`);
     return data;
   },
+  async simulateRules(payload: { scope: string; context: Record<string, unknown>; include_inactive?: boolean }) {
+    const { data } = await wcClient.post('/api/v1/rules/simulate', payload);
+    return data;
+  },
+  async detectRuleConflicts(scope?: string) {
+    const { data } = await wcClient.get('/api/v1/rules/detect-conflicts', { params: scope ? { scope } : {} });
+    return data;
+  },
 
   // --- Reports: Rule Engine ---
   async reportPickingEfficiency(params?: { from?: string; to?: string }) {

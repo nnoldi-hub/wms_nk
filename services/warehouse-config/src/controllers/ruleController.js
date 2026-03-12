@@ -7,7 +7,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
-const { applyRules, buildContext } = require('../services/ruleEngine');
+const { applyRules, buildContext, getFieldValue, evaluateCondition } = require('../services/ruleEngine');
 const { suggestPutaway } = require('../services/putawayEngine');
 const { suggestPicking } = require('../services/pickingEngine');
 const cache = require('../services/cache');
@@ -389,6 +389,185 @@ class RuleController {
       });
     } catch (err) {
       logger.error('[RuleController] evaluate error:', err);
+      next(err);
+    }
+  }
+
+  // ─── SIMULATE (playground complet) ───────────────────────────────────────
+
+  async simulate(req, res, next) {
+    try {
+      const { scope, context: rawContext, include_inactive } = req.body;
+
+      if (!scope || !rawContext) {
+        return res.status(400).json({ success: false, error: 'scope și context sunt obligatorii' });
+      }
+
+      // Preia TOATE regulile pentru scope (active + opțional inactive)
+      const rulesResult = await db.query(
+        `SELECT * FROM wms_rules
+         WHERE scope = $1 ${include_inactive ? '' : 'AND is_active = true'}
+         ORDER BY priority DESC`,
+        [scope.toUpperCase()]
+      );
+      const rules = rulesResult.rows;
+
+      // Evaluare detaliată regulă cu regulă
+      const ruleDetails = rules.map(rule => {
+        const conditions = Array.isArray(rule.conditions) ? rule.conditions : [];
+        const condEvals = conditions.map(cond => {
+          let passed = false;
+          let actual_value = null;
+          let reason = null;
+          try {
+            actual_value = getFieldValue(rawContext, cond.field);
+            passed = evaluateCondition(cond, rawContext);
+            reason = passed ? null : `${cond.field} (valoare: ${JSON.stringify(actual_value)}) nu satisface ${cond.operator} ${JSON.stringify(cond.value)}`;
+          } catch (e) {
+            reason = `Eroare evaluare: ${e.message}`;
+          }
+          return {
+            field: cond.field,
+            operator: cond.operator,
+            expected: cond.value,
+            actual_value,
+            passed,
+            reason,
+          };
+        });
+
+        const allPassed = conditions.length === 0 || condEvals.every(c => c.passed);
+
+        return {
+          rule_id: rule.id,
+          rule_name: rule.name,
+          rule_type: rule.rule_type,
+          priority: rule.priority,
+          is_active: rule.is_active,
+          matched: allPassed,
+          conditions_evaluated: condEvals,
+          actions: allPassed ? (Array.isArray(rule.actions) ? rule.actions : []) : [],
+          no_conditions: conditions.length === 0,
+        };
+      });
+
+      // Acțiuni finale (prioritate mai mare câștigă, ca în applyRules)
+      const actionMap = {};
+      for (const r of ruleDetails.filter(r => r.matched)) {
+        for (const action of r.actions) {
+          if (!actionMap[action.type]) {
+            actionMap[action.type] = { ...action, from_rule: r.rule_name, from_priority: r.priority };
+          }
+        }
+      }
+      const final_actions = Object.values(actionMap);
+      const matched_count = ruleDetails.filter(r => r.matched).length;
+
+      // Verifică dacă fallback ar fi aplicat
+      let fallback_applied = false;
+      let fallback_strategy = null;
+      if (matched_count === 0) {
+        fallback_applied = true;
+        fallback_strategy = 'FIFO (default sistem)';
+      }
+
+      res.json({
+        success: true,
+        scope: scope.toUpperCase(),
+        context: rawContext,
+        total_rules: rules.length,
+        matched_count,
+        rules: ruleDetails,
+        final_actions,
+        fallback_applied,
+        fallback_strategy,
+      });
+    } catch (err) {
+      logger.error('[RuleController] simulate error:', err);
+      next(err);
+    }
+  }
+
+  // ─── DETECT CONFLICTS ─────────────────────────────────────────────────────
+
+  async detectConflicts(req, res, next) {
+    try {
+      const { scope } = req.query;
+
+      let query = `SELECT * FROM wms_rules WHERE is_active = true ORDER BY scope, priority DESC`;
+      const params = [];
+      if (scope) {
+        query = `SELECT * FROM wms_rules WHERE is_active = true AND scope = $1 ORDER BY priority DESC`;
+        params.push(scope.toUpperCase());
+      }
+
+      const rulesResult = await db.query(query, params);
+      const rules = rulesResult.rows;
+
+      const conflicts = [];
+
+      // Grupare pe scope
+      const byScope = {};
+      for (const r of rules) {
+        if (!byScope[r.scope]) byScope[r.scope] = [];
+        byScope[r.scope].push(r);
+      }
+
+      for (const [sc, scopeRules] of Object.entries(byScope)) {
+        // Detectare: două reguli cu aceeași prioritate → conflict de ordine
+        const priorityGroups = {};
+        for (const r of scopeRules) {
+          const p = r.priority;
+          if (!priorityGroups[p]) priorityGroups[p] = [];
+          priorityGroups[p].push(r);
+        }
+        for (const [p, group] of Object.entries(priorityGroups)) {
+          if (group.length > 1) {
+            conflicts.push({
+              type: 'SAME_PRIORITY',
+              severity: 'WARNING',
+              scope: sc,
+              message: `${group.length} reguli au aceeași prioritate (${p}) — ordinea de aplicare este nedeterminată`,
+              rule_ids: group.map(r => r.id),
+              rule_names: group.map(r => r.name),
+            });
+          }
+        }
+
+        // Detectare: două reguli active pot genera acțiuni contradictorii (aceeași cheie)
+        const actionTypes = {};
+        for (const r of scopeRules) {
+          const actions = Array.isArray(r.actions) ? r.actions : [];
+          for (const a of actions) {
+            if (!actionTypes[a.type]) actionTypes[a.type] = [];
+            actionTypes[a.type].push({ rule_id: r.id, rule_name: r.name, value: a.value, priority: r.priority });
+          }
+        }
+        for (const [aType, entries] of Object.entries(actionTypes)) {
+          if (entries.length > 1) {
+            const values = [...new Set(entries.map(e => JSON.stringify(e.value)))];
+            if (values.length > 1) {
+              conflicts.push({
+                type: 'CONFLICTING_ACTIONS',
+                severity: 'ERROR',
+                scope: sc,
+                action_type: aType,
+                message: `Acțiunea "${aType}" are valori contradictorii în ${entries.length} reguli — cea cu prioritatea cea mai mare va câștiga`,
+                entries: entries.sort((a, b) => b.priority - a.priority),
+              });
+            }
+          }
+        }
+      }
+
+      res.json({
+        success: true,
+        total_conflicts: conflicts.length,
+        has_errors: conflicts.some(c => c.severity === 'ERROR'),
+        conflicts,
+      });
+    } catch (err) {
+      logger.error('[RuleController] detectConflicts error:', err);
       next(err);
     }
   }

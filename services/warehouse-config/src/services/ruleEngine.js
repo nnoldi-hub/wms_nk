@@ -278,6 +278,7 @@ function checkRequireApproval(actions) {
 module.exports = {
   evaluateRule,
   evaluateCondition,
+  getFieldValue,
   applyRules,
   getAction,
   hasAction,

@@ -16,7 +16,9 @@ import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import HistoryIcon from '@mui/icons-material/History';
 import RestoreIcon from '@mui/icons-material/Restore';
+import SportsEsportsIcon from '@mui/icons-material/SportsEsports';
 import warehouseConfigService from '../services/warehouseConfig.service';
+import { RuleSimulatorDialog } from './RuleSimulatorDialog';
 
 // ─── Tipuri ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +149,9 @@ export function RulesTab() {
   const [versions, setVersions] = useState<RuleVersion[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
   const [restoreConfirm, setRestoreConfirm] = useState<RuleVersion | null>(null);
+
+  // ── Simulator ──
+  const [openSimulator, setOpenSimulator] = useState(false);
 
   const scopesList = ['ALL', ...SCOPES];
 
@@ -404,6 +409,9 @@ export function RulesTab() {
         <Box sx={{ flexGrow: 1 }} />
         <Button variant="outlined" startIcon={<FormatListNumberedIcon />} onClick={openReorderDialog}>
           Reordonează
+        </Button>
+        <Button variant="outlined" color="secondary" startIcon={<SportsEsportsIcon />} onClick={() => setOpenSimulator(true)}>
+          Simulare
         </Button>
         <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
           Regulă Nouă
@@ -744,6 +752,9 @@ export function RulesTab() {
           </Button>
         </DialogActions>
       </Dialog>
+
+      {/* ── Simulator Reguli ── */}
+      <RuleSimulatorDialog open={openSimulator} onClose={() => setOpenSimulator(false)} />
     </Box>
   );
 }
