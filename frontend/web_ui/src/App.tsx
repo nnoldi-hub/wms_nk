@@ -22,6 +22,7 @@ import { WarehouseConfigPage } from './pages/WarehouseConfigPage';
 import PickJobsPage from './pages/PickJobsPage';
 import { StocImportPage } from './pages/StocImportPage';
 import QRLocationsPage from './pages/QRLocationsPage';
+import ReceptieMarfaPage from './pages/ReceptieMarfaPage';
 import theme from './theme';
 
 function App() {
@@ -198,6 +199,16 @@ function App() {
                 <ProtectedRoute roles={['admin','manager']}>
                   <Layout>
                     <QRLocationsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/receptie"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <ReceptieMarfaPage />
                   </Layout>
                 </ProtectedRoute>
               }

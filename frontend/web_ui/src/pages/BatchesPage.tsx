@@ -17,6 +17,7 @@ import {
   Tooltip,
   Card,
   CardContent,
+  Autocomplete,
 } from '@mui/material';
 import { DataGrid, type GridColDef } from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
@@ -25,13 +26,23 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ContentCutIcon from '@mui/icons-material/ContentCut';
+import axios from 'axios';
 import { batchService, type Batch, type CreateBatchDto, type UpdateBatchDto, type BatchStatistics } from '../services/batch.service';
 import { productsService } from '../services/products.service';
 import { CutSimulatorDialog } from '../components/CutSimulatorDialog';
 
+const INVENTORY_API = 'http://localhost:3011/api/v1';
+
+interface LocationOption {
+  id: string;
+  label: string;
+  zone: string;
+}
+
 export const BatchesPage = () => {
   const [batches, setBatches] = useState<Batch[]>([]);
   const [products, setProducts] = useState<Array<{ sku: string; name: string }>>([]);
+  const [locations, setLocations] = useState<LocationOption[]>([]);
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState('');
   const [productFilter, setProductFilter] = useState('');
@@ -72,6 +83,23 @@ export const BatchesPage = () => {
     }
   }, []);
 
+  const fetchLocations = useCallback(async () => {
+    try {
+      const token = localStorage.getItem('accessToken');
+      const { data } = await axios.get(`${INVENTORY_API}/locations?is_active=true`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const locs = data.data || data.locations || data || [];
+      setLocations(locs.map((l: { id: string; location_code: string; zone: string; rack: string; position: string }) => ({
+        id: l.id,
+        label: `${l.location_code || l.id} — ${l.zone || ''}${l.rack ? ' / ' + l.rack : ''}${l.position ? ' / ' + l.position : ''}`,
+        zone: l.zone || '',
+      })));
+    } catch (error) {
+      console.error('Failed to load locations:', error);
+    }
+  }, []);
+
   const fetchStatistics = useCallback(async () => {
     try {
       const data = await batchService.getStatistics();
@@ -85,6 +113,7 @@ export const BatchesPage = () => {
     fetchBatches();
     fetchProducts();
     fetchStatistics();
+    fetchLocations();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, productFilter]);
 
@@ -417,10 +446,17 @@ export const BatchesPage = () => {
               </Select>
             </FormControl>
 
-            <TextField
-              label="Location ID"
-              value={formData.location_id || ''}
-              onChange={(e) => setFormData({ ...formData, location_id: e.target.value })}
+            <Autocomplete
+              options={locations}
+              getOptionLabel={(o) => o.label}
+              value={locations.find((l) => l.id === formData.location_id) || null}
+              onChange={(_, val) => setFormData({ ...formData, location_id: val?.id || '' })}
+              renderInput={(params) => (
+                <TextField {...params} label="Locație" placeholder="Caută după cod sau zonă..." />
+              )}
+              isOptionEqualToValue={(o, v) => o.id === v.id}
+              groupBy={(o) => o.zone}
+              noOptionsText="Nicio locație găsită"
             />
 
             <TextField

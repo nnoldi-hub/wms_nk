@@ -19,6 +19,7 @@ import WarehouseIcon from '@mui/icons-material/Warehouse';
 import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
 import FileUploadIcon from '@mui/icons-material/FileUpload';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
+import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
 import { useAuth } from '../hooks/useAuth';
 
 const drawerWidth = 260;
@@ -52,6 +53,7 @@ const menuGroups: MenuGroupDef[] = [
     roles: ['admin', 'manager', 'operator'],
     items: [
       { text: 'Produse', icon: <InventoryIcon />, path: '/products', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Recepție Marfă', icon: <MoveToInboxIcon />, path: '/receptie', roles: ['admin', 'manager', 'operator'] },
       { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders', roles: ['admin', 'manager', 'operator'] },
       { text: 'Picking', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs', roles: ['admin', 'manager', 'operator'] },
       { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments', roles: ['admin', 'manager', 'operator'] },
