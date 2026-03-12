@@ -5,7 +5,6 @@ import {
 } from '@mui/material';
 import PrintIcon from '@mui/icons-material/Print';
 import QrCode2Icon from '@mui/icons-material/QrCode2';
-import QRCode from 'react-qr-code';
 import axios from 'axios';
 
 const INVENTORY_API = 'http://localhost:3011/api/v1';
@@ -21,6 +20,12 @@ interface Location {
   notes: string;
   requires_forklift: boolean;
   item_count: number;
+}
+
+// QR via Google Charts API (funcționează în browser fără librărie)
+function QRImg({ value, size = 120 }: { value: string; size?: number }) {
+  const url = `https://chart.googleapis.com/chart?chs=${size}x${size}&cht=qr&chl=${encodeURIComponent(value)}&choe=UTF-8`;
+  return <img src={url} width={size} height={size} alt={value} loading="lazy" style={{ display: 'block' }} />;
 }
 
 const ZONE_LABELS: Record<string, string> = {
@@ -203,11 +208,7 @@ export default function QRLocationsPage() {
             >
               {/* QR Code */}
               <Box sx={{ display: 'flex', justifyContent: 'center', mb: 1 }}>
-                <QRCode
-                  value={qrValue}
-                  size={120}
-                  style={{ height: 'auto', maxWidth: '100%', width: '120px' }}
-                />
+                <QRImg value={qrValue} size={120} />
               </Box>
 
               {/* Cod locație */}
