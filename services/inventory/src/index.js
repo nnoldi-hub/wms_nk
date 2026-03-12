@@ -150,11 +150,17 @@ const ordersRoutes = require('./routes/orders');
 const pickingRoutes = require('./routes/picking');
 const inventoryRoutes = require('./routes/inventory');
 const receptieRoutes = require('./routes/receptie');
+const purchaseOrdersRoutes = require('./routes/purchaseOrders');
+const goodsReceiptsRoutes = require('./routes/goodsReceipts');
+const drumTypesRoutes = require('./routes/drumTypes');
 
 // API routes
 app.use('/api/v1/products', productsRoutes);
 app.use('/api/v1/locations', locationsRoutes);
 app.use('/api/v1/receptie', receptieRoutes);
+app.use('/api/v1/purchase-orders', purchaseOrdersRoutes);
+app.use('/api/v1/goods-receipts', goodsReceiptsRoutes);
+app.use('/api/v1/drum-types', drumTypesRoutes);
 app.use('/api/v1/movements', movementsRoutes);
 app.use('/api/v1/batches', batchesRoutes);
 app.use('/api/v1/transformations', transformationsRoutes);

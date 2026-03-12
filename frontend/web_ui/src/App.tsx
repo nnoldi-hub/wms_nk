@@ -23,6 +23,8 @@ import PickJobsPage from './pages/PickJobsPage';
 import { StocImportPage } from './pages/StocImportPage';
 import QRLocationsPage from './pages/QRLocationsPage';
 import ReceptieMarfaPage from './pages/ReceptieMarfaPage';
+import ComenziFurnizorPage from './pages/ComenziFurnizorPage';
+import ReceptieNIRPage from './pages/ReceptieNIRPage';
 import theme from './theme';
 
 function App() {
@@ -209,6 +211,26 @@ function App() {
                 <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <ReceptieMarfaPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/comenzi-furnizor"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <ComenziFurnizorPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/receptie-nir"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <ReceptieNIRPage />
                   </Layout>
                 </ProtectedRoute>
               }
