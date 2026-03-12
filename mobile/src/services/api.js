@@ -131,4 +131,17 @@ export const pickingAPI = {
     api.post(`${API_CONFIG.ENDPOINTS.PICK_JOB_BY_ID(id)}/complete`, payload || {}),
 };
 
+export const suggestAPI = {
+  putaway: (payload) =>
+    api.post(API_CONFIG.ENDPOINTS.SUGGEST_PUTAWAY, payload),
+
+  picking: (payload) =>
+    api.post(API_CONFIG.ENDPOINTS.SUGGEST_PICKING, payload),
+};
+
+export const warehouseAPI = {
+  list: (params) =>
+    api.get(API_CONFIG.ENDPOINTS.WAREHOUSES, { params }),
+};
+
 export default api;

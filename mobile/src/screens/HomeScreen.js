@@ -53,6 +53,22 @@ const HomeScreen = ({ navigation }) => {
       screen: 'History',
       color: '#8b5cf6',
     },
+    {
+      id: 'receiving',
+      title: 'Recepție',
+      description: 'Preia marfă nou primită',
+      icon: '📥',
+      screen: 'Receiving',
+      color: '#0891b2',
+    },
+    {
+      id: 'putaway',
+      title: 'Putaway',
+      description: 'Plasare produse în locație',
+      icon: '📤',
+      screen: 'Putaway',
+      color: '#7c3aed',
+    },
   ];
 
   return (

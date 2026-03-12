@@ -17,6 +17,8 @@ import MovementsScreen from '../screens/MovementsScreen';
 import HistoryScreen from '../screens/HistoryScreen';
 import PickJobsScreen from '../screens/PickJobsScreen';
 import PickJobDetailsScreen from '../screens/PickJobDetailsScreen';
+import ReceivingScreen from '../screens/ReceivingScreen';
+import PutawayScreen from '../screens/PutawayScreen';
 
 const Stack = createStackNavigator();
 const Tab = createBottomTabNavigator();
@@ -141,6 +143,16 @@ const AppNavigator = () => {
               name="PickJobDetails"
               component={PickJobDetailsScreen}
               options={{ title: 'Job' }}
+            />
+            <Stack.Screen
+              name="Receiving"
+              component={ReceivingScreen}
+              options={{ title: 'Recepție Marfă' }}
+            />
+            <Stack.Screen
+              name="Putaway"
+              component={PutawayScreen}
+              options={{ title: 'Plasare Locație' }}
             />
           </>
         )}

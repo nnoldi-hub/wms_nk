@@ -364,4 +364,33 @@ router.put('/warehouse-settings/:id', adminOnly, warehouseSettingsController.upd
 // DELETE /api/v1/warehouse-settings/:id (Admin only)
 router.delete('/warehouse-settings/:id', adminOnly, warehouseSettingsController.remove);
 
+// ============================================================================
+// RULE ENGINE ROUTES
+// ============================================================================
+const ruleController = require('../controllers/ruleController');
+
+// GET  /api/v1/rules                 - listare reguli (filtrare ?scope=PICKING&is_active=true)
+router.get('/rules', ruleController.getAll);
+
+// GET  /api/v1/rules/:id             - detalii regulă
+router.get('/rules/:id', ruleController.getById);
+
+// POST /api/v1/rules                 - creare regulă nouă (Manager/Admin)
+router.post('/rules', managerOrAdmin, ruleController.create);
+
+// PUT  /api/v1/rules/:id             - editare regulă (Manager/Admin)
+router.put('/rules/:id', managerOrAdmin, ruleController.update);
+
+// DELETE /api/v1/rules/:id           - ștergere regulă (Admin)
+router.delete('/rules/:id', adminOnly, ruleController.remove);
+
+// POST /api/v1/rules/evaluate        - testare manuală set de reguli față de un context
+router.post('/rules/evaluate', managerOrAdmin, ruleController.evaluate);
+
+// POST /api/v1/suggest/putaway       - sugestie locație la recepție
+router.post('/suggest/putaway', ruleController.suggestPutaway);
+
+// POST /api/v1/suggest/picking       - sugestie stoc optim pentru o linie de picking
+router.post('/suggest/picking', ruleController.suggestPicking);
+
 module.exports = router;

@@ -10,6 +10,12 @@ const ItemRow = ({ item, onPick }) => {
       <View style={{ flex: 1 }}>
         <Text style={styles.itemTitle}>{item.product_sku} {item.lot_label ? `(lot: ${item.lot_label})` : ''}</Text>
         <Text style={styles.itemSub}>Cerut: {item.requested_qty} {item.uom} · Cules: {item.picked_qty}</Text>
+        {item.rule_applied_name ? (
+          <Text style={styles.ruleTag}>⚡ {item.rule_applied_name}</Text>
+        ) : null}
+        {item.pick_strategy ? (
+          <Text style={styles.strategyTag}>{item.pick_strategy}</Text>
+        ) : null}
       </View>
       <TouchableOpacity style={[styles.pickBtn, remaining <= 0 && styles.pickBtnDisabled]} disabled={remaining <= 0} onPress={() => onPick(item)}>
         <Text style={[styles.pickBtnText, remaining <= 0 && styles.pickBtnTextDisabled]}>+1</Text>
@@ -69,6 +75,11 @@ const PickJobDetailsScreen = ({ route, navigation }) => {
         <Text style={[styles.badge, styles[`badge_${job?.status}`] || styles.badge_DEFAULT]}>{job?.status}</Text>
       </View>
       {job?.assigned_to && <Text style={styles.sub}>Asignat: {job.assigned_to}</Text>}
+      {job?.pick_strategy && (
+        <View style={styles.strategyBar}>
+          <Text style={styles.strategyBarText}>🧠 Strategie: {job.pick_strategy}</Text>
+        </View>
+      )}
       <View style={styles.actions}>
         {job?.status === 'NEW' && (
           <TouchableOpacity style={styles.primaryBtn} onPress={acceptJob}>
@@ -115,6 +126,10 @@ const styles = StyleSheet.create({
   itemRow: { flexDirection: 'row', alignItems: 'center', padding: 12, backgroundColor: APP_CONFIG.COLORS.CARD, borderBottomWidth: StyleSheet.hairlineWidth, borderColor: APP_CONFIG.COLORS.BORDER },
   itemTitle: { fontWeight: '700', color: APP_CONFIG.COLORS.TEXT },
   itemSub: { marginTop: 4, color: APP_CONFIG.COLORS.TEXT_SECONDARY },
+  ruleTag: { marginTop: 3, fontSize: 11, color: '#92400e', backgroundColor: '#fef3c7', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, alignSelf: 'flex-start' },
+  strategyTag: { marginTop: 3, fontSize: 11, color: '#1d4ed8', backgroundColor: '#dbeafe', borderRadius: 4, paddingHorizontal: 6, paddingVertical: 1, alignSelf: 'flex-start' },
+  strategyBar: { backgroundColor: '#eff6ff', paddingHorizontal: 12, paddingVertical: 6, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: APP_CONFIG.COLORS.BORDER },
+  strategyBarText: { color: '#1d4ed8', fontSize: 13, fontWeight: '600' },
   pickBtn: { backgroundColor: APP_CONFIG.COLORS.SUCCESS, paddingHorizontal: 12, paddingVertical: 8, borderRadius: 6 },
   pickBtnDisabled: { backgroundColor: '#a7f3d0' },
   pickBtnText: { color: 'white', fontWeight: '700' },

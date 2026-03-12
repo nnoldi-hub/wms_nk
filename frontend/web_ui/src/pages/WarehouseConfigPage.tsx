@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, useCallback } from 'react';
-import { Box, Button, Card, CardContent, Divider, Stack, Typography, Alert, List, ListItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, FormControl, InputLabel, Snackbar, Switch, FormControlLabel, IconButton, Tooltip } from '@mui/material';
+import { Box, Button, Card, CardContent, Divider, Stack, Typography, Alert, List, ListItem, ListItemText, Dialog, DialogTitle, DialogContent, DialogActions, TextField, MenuItem, Select, FormControl, InputLabel, Snackbar, Switch, FormControlLabel, IconButton, Tooltip, Tabs, Tab } from '@mui/material';
 import { DataGrid } from '@mui/x-data-grid';
 import type { GridColDef, GridPaginationModel, GridRowId, GridRowSelectionModel, GridSortModel } from '@mui/x-data-grid';
 import QRCode from 'qrcode';
@@ -7,6 +7,7 @@ import VisibilityIcon from '@mui/icons-material/Visibility';
 import DeleteIcon from '@mui/icons-material/Delete';
 import EditIcon from '@mui/icons-material/Edit';
 import warehouseConfigService from '../services/warehouseConfig.service';
+import { RulesTab } from '../components/RulesTab';
 
 interface HealthResponse {
   status: string;
@@ -498,11 +499,25 @@ export function WarehouseConfigPage() {
     },
   ], [handleViewLocation, handleDeleteLocation]);
 
+  const [mainTab, setMainTab] = useState(0);
+
   return (
     <Box sx={{ p: 3 }}>
       <Typography variant="h4" gutterBottom>
-        Configurare Depozit – Test Backend
+        Configurare Depozit
       </Typography>
+
+      {/* ── Tab-uri principale ── */}
+      <Tabs value={mainTab} onChange={(_, v) => setMainTab(v)} sx={{ mb: 3, borderBottom: 1, borderColor: 'divider' }}>
+        <Tab label="Depozit & Locații" />
+        <Tab label="Reguli WMS" />
+      </Tabs>
+
+      {/* ── Tab 1: Reguli WMS ── */}
+      {mainTab === 1 && <RulesTab />}
+
+      {/* ── Tab 0: Config Depozit (conținut existent) ── */}
+      {mainTab === 0 && <Box>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
         Tool de verificare rapidă pentru serviciul warehouse-config: health, token dev și listări de bază.
       </Typography>
@@ -1218,6 +1233,7 @@ export function WarehouseConfigPage() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         ContentProps={{ style: { backgroundColor: '#2e7d32' } }}
       />
+      </Box>}
     </Box>
   );
 }

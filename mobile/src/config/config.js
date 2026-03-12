@@ -29,6 +29,13 @@ export const API_CONFIG = {
     PICK_JOB_ACCEPT: (id) => `/api/v1/pick-jobs/${id}/accept`,
     PICK_JOB_PICK: (id) => `/api/v1/pick-jobs/${id}/pick`,
     ORDER_ALLOCATE: (id) => `/api/v1/orders/${id}/allocate`,
+
+    // Rule Engine Suggestions
+    SUGGEST_PUTAWAY: '/api/v1/suggest/putaway',
+    SUGGEST_PICKING: '/api/v1/suggest/picking',
+
+    // Warehouses
+    WAREHOUSES: '/api/v1/warehouses',
   }
 };
 

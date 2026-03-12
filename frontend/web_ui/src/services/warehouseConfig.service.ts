@@ -139,6 +139,48 @@ export const warehouseConfigService = {
     const { data } = await wcClient.put(`/api/v1/location-types/${id}`, payload);
     return data;
   },
+
+  // --- WMS Rules (Rule Engine) ---
+  async listRules(params?: { scope?: string; is_active?: boolean }) {
+    const { data } = await wcClient.get('/api/v1/rules', { params });
+    return data;
+  },
+  async getRule(id: string) {
+    const { data } = await wcClient.get(`/api/v1/rules/${id}`);
+    return data;
+  },
+  async createRule(payload: {
+    name: string; description?: string; scope: string; rule_type: string;
+    priority?: number; is_active?: boolean;
+    conditions?: unknown[]; actions?: unknown[];
+  }) {
+    const { data } = await wcClient.post('/api/v1/rules', payload);
+    return data;
+  },
+  async updateRule(id: string, payload: Partial<{
+    name: string; description: string; scope: string; rule_type: string;
+    priority: number; is_active: boolean;
+    conditions: unknown[]; actions: unknown[];
+  }>) {
+    const { data } = await wcClient.put(`/api/v1/rules/${id}`, payload);
+    return data;
+  },
+  async deleteRule(id: string) {
+    const { data } = await wcClient.delete(`/api/v1/rules/${id}`);
+    return data;
+  },
+  async evaluateRule(payload: { rule_id?: string; scope: string; context: Record<string, unknown> }) {
+    const { data } = await wcClient.post('/api/v1/rules/evaluate', payload);
+    return data;
+  },
+  async suggestPicking(payload: { product_sku: string; requested_qty: number; uom: string; product?: Record<string, unknown> }) {
+    const { data } = await wcClient.post('/api/v1/suggest/picking', payload);
+    return data;
+  },
+  async suggestPutaway(payload: { warehouse_id: string; product_sku: string; product?: Record<string, unknown>; quantity?: number }) {
+    const { data } = await wcClient.post('/api/v1/suggest/putaway', payload);
+    return data;
+  },
 };
 
 export default warehouseConfigService;

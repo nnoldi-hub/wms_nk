@@ -2,6 +2,39 @@
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
 
+// URL intern Docker pentru warehouse-config (picking engine)
+const WAREHOUSE_CONFIG_URL = process.env.WAREHOUSE_CONFIG_URL || 'http://wms-warehouse-config:3000';
+
+/**
+ * Apelează picking engine (non-blocking) pentru a obține strategia optimă.
+ * Returnează { strategy, rule_applied_name, rule_applied_id, suggestion } sau null la eroare.
+ */
+async function callPickingEngine(forwardToken, productSku, requestedQty, uom, product) {
+  try {
+    const resp = await fetch(`${WAREHOUSE_CONFIG_URL}/api/v1/suggest/picking`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(forwardToken ? { Authorization: `Bearer ${forwardToken}` } : {}),
+      },
+      body: JSON.stringify({ product_sku: productSku, requested_qty: requestedQty, uom, product }),
+      signal: AbortSignal.timeout(3000), // max 3s
+    });
+    if (!resp.ok) return null;
+    const data = await resp.json();
+    if (!data.success) return null;
+    const topRule = (data.matchedRules || [])[0];
+    return {
+      strategy: data.strategy || null,
+      rule_applied_name: topRule?.name || null,
+      rule_applied_id: topRule?.id || null,
+      suggestion: data,
+    };
+  } catch {
+    return null; // engine indisponibil — nu blochăm crearea jobului
+  }
+}
+
 // Helper to extract user identity string
 function getUserId(req) {
   const u = req.user || {};
@@ -38,13 +71,37 @@ module.exports = {
       );
       const job = j.rows[0];
 
+      // Extrage token JWT din request pentru a apela picking engine
+      const authHeader = req.headers?.authorization || req.headers?.Authorization || '';
+      const jwtToken = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+
       // Create job items from sales order lines and reserve inventory (FIFO)
       const lines = await client.query('SELECT * FROM sales_order_lines WHERE order_id = $1 ORDER BY line_no', [id]);
+      let jobStrategy = null;
       for (const ln of lines.rows) {
+        // Consultă picking engine în paralel cu pregătirea datelor (non-blocking)
+        const engineResult = await callPickingEngine(
+          jwtToken,
+          ln.product_sku,
+          Number(ln.requested_qty) || 0,
+          ln.uom || 'm',
+          { category: ln.product_category || null }
+        );
+        if (engineResult?.strategy && !jobStrategy) jobStrategy = engineResult.strategy;
+
         const itemRes = await client.query(
-          `INSERT INTO picking_job_items (job_id, line_id, product_sku, requested_qty, uom, lot_label, status)
-           VALUES ($1,$2,$3,COALESCE($4::numeric, 0.0),$5,$6,'PENDING') RETURNING id`,
-          [job.id, ln.id, ln.product_sku, ln.requested_qty, ln.uom || 'm', ln.lot_label || null]
+          `INSERT INTO picking_job_items
+             (job_id, line_id, product_sku, requested_qty, uom, lot_label, status,
+              pick_strategy, rule_applied_name, rule_applied_id, engine_suggestion)
+           VALUES ($1,$2,$3,COALESCE($4::numeric, 0.0),$5,$6,'PENDING',$7,$8,$9,$10)
+           RETURNING id`,
+          [
+            job.id, ln.id, ln.product_sku, ln.requested_qty, ln.uom || 'm', ln.lot_label || null,
+            engineResult?.strategy || null,
+            engineResult?.rule_applied_name || null,
+            engineResult?.rule_applied_id || null,
+            engineResult?.suggestion ? JSON.stringify(engineResult.suggestion) : null,
+          ]
         );
         const jobItemId = itemRes.rows[0].id;
 
@@ -74,6 +131,15 @@ module.exports = {
       }
 
       await client.query('COMMIT');
+
+      // Actualizează strategia la nivel de job (dacă a determinat-o engine-ul)
+      if (jobStrategy) {
+        await req.db.query(
+          `UPDATE picking_jobs SET pick_strategy = $1 WHERE id = $2`,
+          [jobStrategy, job.id]
+        );
+      }
+
       // Return job with items count
       const itemsCount = await req.db.query('SELECT COUNT(*)::int AS c FROM picking_job_items WHERE job_id = $1', [job.id]);
       return res.status(201).json({ success: true, data: { job, items_count: itemsCount.rows[0].c } });
