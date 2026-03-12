@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
+const cache = require('../services/cache');
 
 class LocationController {
   // Get all locations for a zone
@@ -14,6 +15,10 @@ class LocationController {
         ['aisle','rack','shelf_level','bin_position','created_at','updated_at','location_code'],
         'aisle'
       );
+
+      const cacheKey = `${cache.keys.locations(zoneId)}:${status||'all'}:${location_type||'all'}:p${page}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) return res.json(cached);
 
       let query = `
         SELECT 
@@ -51,7 +56,9 @@ class LocationController {
       const result = await db.query(wrapped, params);
 
       const total = result.rows.length ? Number(result.rows[0].total_count) : 0;
-      res.json({ success: true, data: result.rows, pagination: { page, limit, total } });
+      const response = { success: true, data: result.rows, pagination: { page, limit, total } };
+      await cache.set(cacheKey, response, cache.TTL.LOCATIONS);
+      res.json(response);
     } catch (error) {
       logger.error('Get locations error:', error);
       next(error);
@@ -125,7 +132,7 @@ class LocationController {
       ]);
 
       logger.info(`Location created: ${data.location_code} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.locations);
       res.status(201).json({
         success: true,
         message: 'Location created successfully',
@@ -198,6 +205,7 @@ class LocationController {
       }
 
       await client.query('COMMIT');
+      await cache.invalidatePrefix(cache.prefixes.locations);
 
       logger.info(`Bulk created ${locations.length} locations for zone ${zone_id} by user ${req.user.id}`);
 
@@ -256,7 +264,7 @@ class LocationController {
       }
 
       logger.info(`Location updated: ${id} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.locations);
       res.json({
         success: true,
         message: 'Location updated successfully',
@@ -299,7 +307,7 @@ class LocationController {
       `, [id]);
 
       logger.info(`Location deleted: ${id} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.locations);
       res.json({
         success: true,
         message: 'Location deleted successfully'

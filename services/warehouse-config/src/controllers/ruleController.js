@@ -10,6 +10,7 @@ const { v4: uuidv4 } = require('uuid');
 const { applyRules, buildContext } = require('../services/ruleEngine');
 const { suggestPutaway } = require('../services/putawayEngine');
 const { suggestPicking } = require('../services/pickingEngine');
+const cache = require('../services/cache');
 
 const VALID_SCOPES = ['PUTAWAY', 'PICKING', 'RECEIVING', 'CUTTING', 'SEWING', 'SHIPPING', 'GENERAL'];
 const VALID_RULE_TYPES = [
@@ -24,36 +25,40 @@ class RuleController {
   async getAll(req, res, next) {
     try {
       const { scope, is_active, rule_type } = req.query;
+      const cacheKey = cache.keys.rules(scope, is_active, rule_type);
 
-      let query = `
-        SELECT r.*, u.username AS created_by_name
-        FROM wms_rules r
-        LEFT JOIN users u ON r.created_by = u.id
-        WHERE 1=1
-      `;
-      const params = [];
-      let idx = 1;
+      const data = await cache.getOrLoad(cacheKey, async () => {
+        let query = `
+          SELECT r.*, u.username AS created_by_name
+          FROM wms_rules r
+          LEFT JOIN users u ON r.created_by = u.id
+          WHERE 1=1
+        `;
+        const params = [];
+        let idx = 1;
 
-      if (scope) {
-        query += ` AND r.scope = $${idx}`;
-        params.push(scope.toUpperCase());
-        idx++;
-      }
-      if (rule_type) {
-        query += ` AND r.rule_type = $${idx}`;
-        params.push(rule_type);
-        idx++;
-      }
-      if (is_active !== undefined) {
-        query += ` AND r.is_active = $${idx}`;
-        params.push(is_active === 'true' || is_active === true);
-        idx++;
-      }
+        if (scope) {
+          query += ` AND r.scope = $${idx}`;
+          params.push(scope.toUpperCase());
+          idx++;
+        }
+        if (rule_type) {
+          query += ` AND r.rule_type = $${idx}`;
+          params.push(rule_type);
+          idx++;
+        }
+        if (is_active !== undefined) {
+          query += ` AND r.is_active = $${idx}`;
+          params.push(is_active === 'true' || is_active === true);
+          idx++;
+        }
 
-      query += ' ORDER BY r.scope, r.priority DESC, r.name';
+        query += ' ORDER BY r.scope, r.priority DESC, r.name';
+        const result = await db.query(query, params);
+        return result.rows;
+      }, cache.TTL.RULES);
 
-      const result = await db.query(query, params);
-      res.json({ success: true, data: result.rows, total: result.rows.length });
+      res.json({ success: true, data, total: data.length });
     } catch (err) {
       logger.error('[RuleController] getAll error:', err);
       next(err);
@@ -119,6 +124,7 @@ class RuleController {
       );
 
       logger.info('[RuleController] Regulă creată:', { id, name, scope });
+      await cache.invalidatePrefix(cache.prefixes.rules);
       res.status(201).json({ success: true, data: result.rows[0] });
     } catch (err) {
       logger.error('[RuleController] create error:', err);
@@ -163,6 +169,7 @@ class RuleController {
         params
       );
 
+      await cache.invalidatePrefix(cache.prefixes.rules);
       res.json({ success: true, data: result.rows[0] });
     } catch (err) {
       logger.error('[RuleController] update error:', err);
@@ -179,6 +186,7 @@ class RuleController {
       if (result.rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Regula nu a fost găsită' });
       }
+      await cache.invalidatePrefix(cache.prefixes.rules);
       res.json({ success: true, message: 'Regulă ștearsă' });
     } catch (err) {
       logger.error('[RuleController] remove error:', err);

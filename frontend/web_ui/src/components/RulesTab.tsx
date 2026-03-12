@@ -42,14 +42,23 @@ interface RuleFormState {
   actions_json: string;
 }
 
-const SCOPES = ['PUTAWAY', 'PICKING', 'RECEIVING', 'CUTTING', 'SEWING', 'SHIPPING', 'GENERAL'];
+const SCOPES = ['PUTAWAY', 'PICKING', 'RECEIVING', 'CUTTING', 'SHIPPING', 'GENERAL'];
+
+const SCOPE_LABELS: Record<string, string> = {
+  ALL: 'Toate',
+  PUTAWAY: 'Aranjare',
+  PICKING: 'Picking',
+  RECEIVING: 'Recepție',
+  CUTTING: 'Tăiere',
+  SHIPPING: 'Livrare',
+  GENERAL: 'General',
+};
 
 const RULE_TYPES_BY_SCOPE: Record<string, string[]> = {
   PICKING: ['FIFO', 'FEFO', 'LIFO', 'USE_REMAINS_FIRST', 'MIN_WASTE', 'LOCATION_PROXIMITY', 'ZONE_PREFERENCE'],
   PUTAWAY: ['ZONE_PREFERENCE', 'LOCATION_TYPE_PREFERENCE', 'WEIGHT_LIMIT', 'CATEGORY_RESTRICTION'],
   RECEIVING: ['ZONE_PREFERENCE', 'REQUIRE_APPROVAL', 'AUTO_ASSIGN'],
   CUTTING: ['MIN_WASTE', 'MAXIMIZE_USAGE'],
-  SEWING: ['FIFO', 'ZONE_PREFERENCE'],
   SHIPPING: ['ZONE_PREFERENCE', 'CARRIER_PREFERENCE'],
   GENERAL: ['CUSTOM'],
 };
@@ -59,7 +68,6 @@ const SCOPE_COLORS: Record<string, 'default'|'primary'|'secondary'|'error'|'info
   PICKING: 'primary',
   RECEIVING: 'info',
   CUTTING: 'warning',
-  SEWING: 'secondary',
   SHIPPING: 'error',
   GENERAL: 'default',
 };
@@ -333,7 +341,7 @@ export function RulesTab() {
           variant="scrollable"
           scrollButtons="auto"
         >
-          {scopesList.map((s) => <Tab key={s} label={s} />)}
+          {scopesList.map((s) => <Tab key={s} label={SCOPE_LABELS[s] ?? s} />)}
         </Tabs>
         <Box sx={{ flexGrow: 1 }} />
         <Button variant="outlined" startIcon={<FormatListNumberedIcon />} onClick={openReorderDialog}>
@@ -400,7 +408,7 @@ export function RulesTab() {
                     setForm(f => ({ ...f, scope: newScope, rule_type: firstType }));
                   }}
                 >
-                  {SCOPES.map(s => <MenuItem key={s} value={s}>{s}</MenuItem>)}
+                  {SCOPES.map(s => <MenuItem key={s} value={s}>{SCOPE_LABELS[s] ?? s}</MenuItem>)}
                 </Select>
               </FormControl>
 

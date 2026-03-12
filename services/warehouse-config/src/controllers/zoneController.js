@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
+const cache = require('../services/cache');
 
 class ZoneController {
   // Get all zones for a warehouse
@@ -14,6 +15,10 @@ class ZoneController {
         ['zone_code','zone_name','zone_type','created_at','updated_at'],
         'zone_code'
       );
+
+      const cacheKey = `${cache.keys.zones(warehouseId)}:${zone_type||'all'}:${is_active||'all'}:p${page}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) return res.json(cached);
 
       let query = `
         SELECT 
@@ -43,12 +48,13 @@ class ZoneController {
       query += ` GROUP BY wz.id ORDER BY wz.${sortBy} ${sortDir} LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
       params.push(limit, offset);
 
-      // Wrap to add total_count window after grouping
       const wrapped = `SELECT *, COUNT(*) OVER() AS total_count FROM (${query}) grouped`;
       const result = await db.query(wrapped, params);
 
       const total = result.rows.length ? Number(result.rows[0].total_count) : 0;
-      res.json({ success: true, data: result.rows, pagination: { page, limit, total } });
+      const response = { success: true, data: result.rows, pagination: { page, limit, total } };
+      await cache.set(cacheKey, response, cache.TTL.ZONES);
+      res.json(response);
     } catch (error) {
       logger.error('Get zones error:', error);
       next(error);
@@ -118,7 +124,7 @@ class ZoneController {
       ]);
 
       logger.info(`Zone created: ${data.zone_code} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.zones);
       res.status(201).json({
         success: true,
         message: 'Zone created successfully',
@@ -168,7 +174,7 @@ class ZoneController {
       }
 
       logger.info(`Zone updated: ${id} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.zones);
       res.json({
         success: true,
         message: 'Zone updated successfully',
@@ -212,7 +218,7 @@ class ZoneController {
       }
 
       logger.info(`Zone deleted: ${id} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.zones);
       res.json({
         success: true,
         message: 'Zone deleted successfully'

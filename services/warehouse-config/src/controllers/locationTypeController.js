@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
+const cache = require('../services/cache');
 
 class LocationTypeController {
   async getAll(req, res, next) {
@@ -12,6 +13,10 @@ class LocationTypeController {
         'code'
       );
 
+      const cacheKey = `${cache.keys.locationTypes()}:p${page}`;
+      const cached = await cache.get(cacheKey);
+      if (cached) return res.json(cached);
+
       const result = await db.query(
         `SELECT *, COUNT(*) OVER() AS total_count
          FROM location_types
@@ -21,7 +26,9 @@ class LocationTypeController {
       );
 
       const total = result.rows.length ? Number(result.rows[0].total_count) : 0;
-      res.json({ success: true, data: result.rows, pagination: { page, limit, total } });
+      const response = { success: true, data: result.rows, pagination: { page, limit, total } };
+      await cache.set(cacheKey, response, cache.TTL.LOC_TYPES);
+      res.json(response);
     } catch (e) {
       logger.error('List location types error:', e);
       next(e);
@@ -68,6 +75,7 @@ class LocationTypeController {
         values
       );
       logger.info(`Location type created ${data.code} by ${req.user?.id || 'system'}`);
+      await cache.invalidatePrefix(cache.prefixes.locationTypes);
       res.status(201).json({ success: true, data: result.rows[0] });
     } catch (e) {
       next(e);
@@ -104,6 +112,7 @@ class LocationTypeController {
         values
       );
       if (!result.rows.length) return res.status(404).json({ error: 'Not found' });
+      await cache.invalidatePrefix(cache.prefixes.locationTypes);
       res.json({ success: true, data: result.rows[0] });
     } catch (e) {
       next(e);

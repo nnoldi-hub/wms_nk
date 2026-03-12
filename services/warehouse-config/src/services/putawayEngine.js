@@ -17,6 +17,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { applyRules, buildContext, getAction, validateLocationForProduct } = require('./ruleEngine');
+const cache = require('./cache');
 
 /**
  * Calculează scorul de potrivire al unei locații.
@@ -61,15 +62,21 @@ function scoreLocation(location, suggestedZoneCode, suggestedLocationType) {
  * @returns {Promise<{ suggestions: Array, matchedRules: Array, actions: Array }>}
  */
 async function suggestPutaway({ warehouseId, product, stock, limit = 5 }) {
-  // 1. Preia regulile PUTAWAY active
-  const rulesResult = await db.query(
-    `SELECT id, name, rule_type, scope, priority, conditions, actions, is_active
-     FROM wms_rules
-     WHERE scope = 'PUTAWAY' AND is_active = true
-     ORDER BY priority DESC`,
-    []
+  // 1. Preia regulile PUTAWAY active (cu cache Redis)
+  const rules = await cache.getOrLoad(
+    'rules:PUTAWAY:true:all',
+    async () => {
+      const r = await db.query(
+        `SELECT id, name, rule_type, scope, priority, conditions, actions, is_active
+         FROM wms_rules
+         WHERE scope = 'PUTAWAY' AND is_active = true
+         ORDER BY priority DESC`,
+        []
+      );
+      return r.rows;
+    },
+    cache.TTL.RULES
   );
-  const rules = rulesResult.rows;
 
   // 2. Construiește contextul
   const context = buildContext({ product, stock });

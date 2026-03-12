@@ -16,6 +16,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { applyRules, buildContext, getAction, hasAction } = require('./ruleEngine');
+const cache = require('./cache');
 
 // ─── Strategii de picking ─────────────────────────────────────────────────────
 
@@ -126,15 +127,21 @@ function allocateStock(sortedStock, requestedQty, allowMultiLot = true) {
  * @returns {Promise<{ picks, strategy, matchedRules, actions, allocation }>}
  */
 async function suggestPicking({ productSku, requestedQty, uom = 'm', product = {}, orderLine = {}, warehouseId }) {
-  // 1. Preia regulile PICKING active
-  const rulesResult = await db.query(
-    `SELECT id, name, rule_type, scope, priority, conditions, actions, is_active
-     FROM wms_rules
-     WHERE scope = 'PICKING' AND is_active = true
-     ORDER BY priority DESC`,
-    []
+  // 1. Preia regulile PICKING active (cu cache Redis)
+  const rules = await cache.getOrLoad(
+    'rules:PICKING:true:all',
+    async () => {
+      const r = await db.query(
+        `SELECT id, name, rule_type, scope, priority, conditions, actions, is_active
+         FROM wms_rules
+         WHERE scope = 'PICKING' AND is_active = true
+         ORDER BY priority DESC`,
+        []
+      );
+      return r.rows;
+    },
+    cache.TTL.RULES
   );
-  const rules = rulesResult.rows;
 
   // 2. Construiește contextul
   const context = buildContext({

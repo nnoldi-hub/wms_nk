@@ -1,6 +1,7 @@
 const db = require('../config/database');
 const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
+const cache = require('../services/cache');
 
 class PackagingController {
   // Get all packaging types
@@ -13,6 +14,14 @@ class PackagingController {
         ['category','packaging_name','packaging_code','created_at','updated_at'],
         'category'
       );
+
+      // Cache only unfiltered first page (most common use case in dropdowns)
+      const cacheKey = !category && !is_reusable && !is_active && !q && page === 1
+        ? `${cache.keys.packagingTypes()}:p1` : null;
+      if (cacheKey) {
+        const cached = await cache.get(cacheKey);
+        if (cached) return res.json(cached);
+      }
 
       let query = 'SELECT * FROM packaging_types WHERE 1=1';
       const params = [];
@@ -49,7 +58,9 @@ class PackagingController {
       const result = await db.query(wrapped, params);
 
       const total = result.rows.length ? Number(result.rows[0].total_count) : 0;
-      res.json({ success: true, data: result.rows, pagination: { page, limit, total } });
+      const response = { success: true, data: result.rows, pagination: { page, limit, total } };
+      if (cacheKey) await cache.set(cacheKey, response, cache.TTL.PACKAGING);
+      res.json(response);
     } catch (error) {
       logger.error('Get packaging types error:', error);
       next(error);
@@ -109,7 +120,7 @@ class PackagingController {
       ]);
 
       logger.info(`Packaging type created: ${data.packaging_code} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.packagingTypes);
       res.status(201).json({
         success: true,
         message: 'Packaging type created successfully',
@@ -159,7 +170,7 @@ class PackagingController {
       }
 
       logger.info(`Packaging type updated: ${id} by user ${req.user.id}`);
-
+      await cache.invalidatePrefix(cache.prefixes.packagingTypes);
       res.json({
         success: true,
         message: 'Packaging type updated successfully',
