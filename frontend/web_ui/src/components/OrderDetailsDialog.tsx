@@ -37,7 +37,7 @@ export const OrderDetailsDialog = ({ open, orderId, onClose }: Props) => {
   const handleDownload = async () => {
     if (!orderId || !order) return;
     const url = ordersService.getPickNoteUrl(orderId);
-    const resp = await fetch(url, { headers: { Authorization: `Bearer ${localStorage.getItem('token') || ''}` } });
+    const resp = await fetch(url, { headers: { Authorization: `Bearer ${localStorage.getItem('accessToken') || ''}` } });
     const blob = await resp.blob();
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
