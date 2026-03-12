@@ -189,6 +189,14 @@ export const warehouseConfigService = {
     const { data } = await wcClient.put('/api/v1/rules/reorder', updates);
     return data;
   },
+  async getRuleVersions(id: string) {
+    const { data } = await wcClient.get(`/api/v1/rules/${id}/versions`);
+    return data;
+  },
+  async restoreRuleVersion(id: string, version: number) {
+    const { data } = await wcClient.post(`/api/v1/rules/${id}/restore/${version}`);
+    return data;
+  },
 
   // --- Reports: Rule Engine ---
   async reportPickingEfficiency(params?: { from?: string; to?: string }) {

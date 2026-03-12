@@ -137,9 +137,13 @@ class RuleController {
   async update(req, res, next) {
     try {
       const { id } = req.params;
-      const { name, rule_type, scope, priority, conditions, actions, description, is_active } = req.body;
+      const { name, rule_type, scope, priority, conditions, actions, description, is_active, change_reason } = req.body;
 
-      const existing = await db.query('SELECT id FROM wms_rules WHERE id = $1', [id]);
+      const existing = await db.query(
+        `SELECT id, name, rule_type, scope, priority, conditions, actions, description, is_active, version_number
+         FROM wms_rules WHERE id = $1`,
+        [id]
+      );
       if (existing.rows.length === 0) {
         return res.status(404).json({ success: false, error: 'Regula nu a fost găsită' });
       }
@@ -147,6 +151,23 @@ class RuleController {
       if (scope && !VALID_SCOPES.includes(scope.toUpperCase())) {
         return res.status(400).json({ success: false, error: `Scope invalid. Valori permise: ${VALID_SCOPES.join(', ')}` });
       }
+
+      const prev = existing.rows[0];
+      const nextVersion = (prev.version_number || 1) + 1;
+
+      // Salvează versiunea anterioară
+      await db.query(
+        `INSERT INTO wms_rule_versions
+           (rule_id, version, name, rule_type, scope, priority, conditions, actions, description, is_active, changed_by, change_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          id, prev.version_number || 1,
+          prev.name, prev.rule_type, prev.scope, prev.priority,
+          prev.conditions, prev.actions, prev.description, prev.is_active,
+          req.user?.userId ?? null,
+          change_reason || null,
+        ]
+      );
 
       const sets = [];
       const params = [];
@@ -161,6 +182,7 @@ class RuleController {
       if (description !== undefined) { sets.push(`description = $${idx}`); params.push(description); idx++; }
       if (is_active !== undefined)   { sets.push(`is_active = $${idx}`); params.push(is_active); idx++; }
 
+      sets.push(`version_number = $${idx}`); params.push(nextVersion); idx++;
       sets.push(`updated_at = NOW()`);
       params.push(id);
 
@@ -173,6 +195,96 @@ class RuleController {
       res.json({ success: true, data: result.rows[0] });
     } catch (err) {
       logger.error('[RuleController] update error:', err);
+      next(err);
+    }
+  }
+
+  // ─── GET VERSIONS ─────────────────────────────────────────────────────────
+
+  async getVersions(req, res, next) {
+    try {
+      const { id } = req.params;
+      const exists = await db.query('SELECT id FROM wms_rules WHERE id = $1', [id]);
+      if (exists.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Regula nu a fost găsită' });
+      }
+
+      const result = await db.query(
+        `SELECT v.*, u.username AS changed_by_name
+         FROM wms_rule_versions v
+         LEFT JOIN users u ON v.changed_by = u.id
+         WHERE v.rule_id = $1
+         ORDER BY v.version DESC`,
+        [id]
+      );
+
+      res.json({ success: true, data: result.rows, total: result.rows.length });
+    } catch (err) {
+      logger.error('[RuleController] getVersions error:', err);
+      next(err);
+    }
+  }
+
+  // ─── RESTORE VERSION ──────────────────────────────────────────────────────
+
+  async restore(req, res, next) {
+    try {
+      const { id, version } = req.params;
+
+      const versionRow = await db.query(
+        `SELECT * FROM wms_rule_versions WHERE rule_id = $1 AND version = $2`,
+        [id, parseInt(version, 10)]
+      );
+      if (versionRow.rows.length === 0) {
+        return res.status(404).json({ success: false, error: `Versiunea ${version} nu există pentru această regulă` });
+      }
+
+      const v = versionRow.rows[0];
+
+      // Salvează starea curentă ca versiune nouă înainte de restore
+      const current = await db.query(
+        `SELECT name, rule_type, scope, priority, conditions, actions, description, is_active, version_number
+         FROM wms_rules WHERE id = $1`,
+        [id]
+      );
+      if (current.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Regula nu a fost găsită' });
+      }
+      const cur = current.rows[0];
+      const nextVersion = (cur.version_number || 1) + 1;
+
+      await db.query(
+        `INSERT INTO wms_rule_versions
+           (rule_id, version, name, rule_type, scope, priority, conditions, actions, description, is_active, changed_by, change_reason)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+        [
+          id, cur.version_number || 1,
+          cur.name, cur.rule_type, cur.scope, cur.priority,
+          cur.conditions, cur.actions, cur.description, cur.is_active,
+          req.user?.userId ?? null,
+          `Restore la versiunea ${version}`,
+        ]
+      );
+
+      const restored = await db.query(
+        `UPDATE wms_rules
+         SET name=$1, rule_type=$2, scope=$3, priority=$4,
+             conditions=$5, actions=$6, description=$7, is_active=$8,
+             version_number=$9, updated_at=NOW()
+         WHERE id=$10
+         RETURNING *`,
+        [
+          v.name, v.rule_type, v.scope, v.priority,
+          v.conditions, v.actions, v.description, v.is_active,
+          nextVersion, id,
+        ]
+      );
+
+      await cache.invalidatePrefix(cache.prefixes.rules);
+      logger.info('[RuleController] Restored rule to version', { id, version });
+      res.json({ success: true, data: restored.rows[0], restored_from_version: parseInt(version, 10) });
+    } catch (err) {
+      logger.error('[RuleController] restore error:', err);
       next(err);
     }
   }

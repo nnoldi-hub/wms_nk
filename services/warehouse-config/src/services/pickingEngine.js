@@ -153,7 +153,22 @@ async function suggestPicking({ productSku, requestedQty, uom = 'm', product = {
   // 3. Aplică regulile
   const { matchedRules, actions } = applyRules(rules, context);
 
-  const strategy = getAction(actions, 'PICK_STRATEGY') || 'FIFO';
+  // Fallback: dacă nicio regulă nu s-a potrivit → preia default_strategy din zona depozitului
+  let strategy = getAction(actions, 'PICK_STRATEGY');
+  if (!strategy) {
+    if (warehouseId) {
+      const zoneStrategy = await db.query(
+        `SELECT default_strategy FROM warehouse_zones
+         WHERE warehouse_id = $1 AND is_active = true
+         ORDER BY created_at ASC LIMIT 1`,
+        [warehouseId]
+      );
+      strategy = zoneStrategy.rows[0]?.default_strategy || 'FIFO';
+    } else {
+      strategy = 'FIFO';
+    }
+  }
+
   const allowMultiLot = hasAction(actions, 'PICK_STRATEGY') &&
     actions.some(a => a.type === 'PICK_STRATEGY' && a.value === 'ALLOW_MULTI_LOT');
   const excludePackaging = getAction(actions, 'EXCLUDE_PACKAGING');
@@ -211,6 +226,7 @@ async function suggestPicking({ productSku, requestedQty, uom = 'm', product = {
     requested_qty: requestedQty,
     uom,
     strategy,
+    strategy_source: matchedRules.length > 0 ? 'rules' : 'zone_default',
     allow_multi_lot: allowMultiLot,
     matchedRules,
     actions,

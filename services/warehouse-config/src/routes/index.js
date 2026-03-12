@@ -377,6 +377,12 @@ router.get('/rules', ruleController.getAll);
 // GET  /api/v1/rules/:id             - detalii regulă
 router.get('/rules/:id', ruleController.getById);
 
+// GET  /api/v1/rules/:id/versions    - istoricul versiunilor unei reguli
+router.get('/rules/:id/versions', managerOrAdmin, ruleController.getVersions);
+
+// POST /api/v1/rules/:id/restore/:version - restaurare versiune anterioară
+router.post('/rules/:id/restore/:version', managerOrAdmin, ruleController.restore);
+
 // POST /api/v1/rules                 - creare regulă nouă (Manager/Admin)
 router.post('/rules', managerOrAdmin, ruleController.create);
 

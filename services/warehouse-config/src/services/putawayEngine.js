@@ -84,8 +84,20 @@ async function suggestPutaway({ warehouseId, product, stock, limit = 5 }) {
   // 3. Aplică regulile
   const { matchedRules, actions } = applyRules(rules, context);
 
-  const suggestedZone = getAction(actions, 'SUGGEST_ZONE');
+  let suggestedZone = getAction(actions, 'SUGGEST_ZONE');
   const suggestedLocationType = getAction(actions, 'SUGGEST_LOCATION');
+
+  // Fallback: dacă nu există sugestie de zonă și avem warehouseId → preia zona cu default_strategy
+  let fallbackStrategy = null;
+  if (matchedRules.length === 0 && warehouseId) {
+    const zoneStrategy = await db.query(
+      `SELECT default_strategy FROM warehouse_zones
+       WHERE warehouse_id = $1 AND is_active = true
+       ORDER BY created_at ASC LIMIT 1`,
+      [warehouseId]
+    );
+    fallbackStrategy = zoneStrategy.rows[0]?.default_strategy || 'FIFO';
+  }
 
   logger.info('[PutawayEngine] Reguli aplicate', {
     total_rules: rules.length,
@@ -161,6 +173,8 @@ async function suggestPutaway({ warehouseId, product, stock, limit = 5 }) {
     suggestions,
     matchedRules,
     actions,
+    strategy_source: matchedRules.length > 0 ? 'rules' : 'zone_default',
+    fallback_strategy: fallbackStrategy,
     context: {
       product_category: productCategory,
       packaging_type: packagingType,

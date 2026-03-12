@@ -14,9 +14,28 @@ import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import FormatListNumberedIcon from '@mui/icons-material/FormatListNumbered';
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
+import HistoryIcon from '@mui/icons-material/History';
+import RestoreIcon from '@mui/icons-material/Restore';
 import warehouseConfigService from '../services/warehouseConfig.service';
 
 // ─── Tipuri ──────────────────────────────────────────────────────────────────
+
+interface RuleVersion {
+  id: string;
+  rule_id: string;
+  version: number;
+  name: string;
+  rule_type: string;
+  scope: string;
+  priority: number;
+  conditions: unknown[];
+  actions: unknown[];
+  description?: string;
+  is_active: boolean;
+  changed_by_name?: string;
+  change_reason?: string;
+  created_at: string;
+}
 
 interface WmsRule {
   id: string;
@@ -121,6 +140,13 @@ export function RulesTab() {
   const [openReorder, setOpenReorder] = useState(false);
   const [reorderList, setReorderList] = useState<WmsRule[]>([]);
   const [reorderSaving, setReorderSaving] = useState(false);
+
+  // ── Versiuni ──
+  const [openVersions, setOpenVersions] = useState(false);
+  const [versionsRule, setVersionsRule] = useState<WmsRule | null>(null);
+  const [versions, setVersions] = useState<RuleVersion[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+  const [restoreConfirm, setRestoreConfirm] = useState<RuleVersion | null>(null);
 
   const scopesList = ['ALL', ...SCOPES];
 
@@ -268,6 +294,33 @@ export function RulesTab() {
     }
   };
 
+  const openHistory = async (rule: WmsRule) => {
+    setVersionsRule(rule);
+    setVersions([]);
+    setOpenVersions(true);
+    setVersionsLoading(true);
+    try {
+      const resp = await warehouseConfigService.getRuleVersions(rule.id);
+      setVersions(resp.data || []);
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setVersionsLoading(false);
+    }
+  };
+
+  const handleRestore = async (v: RuleVersion) => {
+    try {
+      await warehouseConfigService.restoreRuleVersion(v.rule_id, v.version);
+      setSuccess(`Revenit la versiunea ${v.version}`);
+      setRestoreConfirm(null);
+      setOpenVersions(false);
+      await loadRules();
+    } catch (e) {
+      setError((e as Error).message);
+    }
+  };
+
   const handleEvaluate = async () => {
     if (!evalRule) return;
     try {
@@ -304,12 +357,17 @@ export function RulesTab() {
       ),
     },
     {
-      field: 'actions_col', headerName: '', width: 110, sortable: false,
+      field: 'actions_col', headerName: '', width: 145, sortable: false,
       renderCell: (p) => (
         <Stack direction="row" spacing={0.5}>
           <Tooltip title="Testează">
             <IconButton size="small" color="info" onClick={() => { setEvalRule(p.row as WmsRule); setEvalResult(null); setOpenEval(true); }}>
               <PlayArrowIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Istoric versiuni">
+            <IconButton size="small" color="secondary" onClick={() => openHistory(p.row as WmsRule)}>
+              <HistoryIcon fontSize="small" />
             </IconButton>
           </Tooltip>
           <Tooltip title="Editează">
@@ -598,6 +656,94 @@ export function RulesTab() {
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
         ContentProps={{ style: { backgroundColor: '#2e7d32' } }}
       />
+
+      {/* ── Dialog Istoric Versiuni ── */}
+      <Dialog open={openVersions} onClose={() => setOpenVersions(false)} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Stack direction="row" alignItems="center" spacing={1}>
+            <HistoryIcon color="secondary" />
+            <span>Istoric versiuni: {versionsRule?.name}</span>
+          </Stack>
+        </DialogTitle>
+        <DialogContent>
+          {versionsLoading && (
+            <Typography color="text.secondary" sx={{ py: 2 }}>Se încarcă versiunile...</Typography>
+          )}
+          {!versionsLoading && versions.length === 0 && (
+            <Alert severity="info">Nu există versiuni salvate (regula nu a fost editată încă).</Alert>
+          )}
+          {!versionsLoading && versions.length > 0 && (
+            <Stack spacing={1.5} mt={1}>
+              {versions.map((v) => (
+                <Box
+                  key={v.id}
+                  sx={{
+                    border: '1px solid', borderColor: 'divider', borderRadius: 1,
+                    p: 1.5, bgcolor: 'background.paper',
+                  }}
+                >
+                  <Stack direction="row" alignItems="flex-start" spacing={2}>
+                    <Box sx={{ flexGrow: 1 }}>
+                      <Stack direction="row" spacing={1} alignItems="center" mb={0.5}>
+                        <Chip label={`v${v.version}`} size="small" color="secondary" variant="outlined" />
+                        <Typography variant="body2" fontWeight={600}>{v.name}</Typography>
+                        <Chip label={v.scope} size="small" color={SCOPE_COLORS[v.scope] || 'default'} />
+                        <Chip label={v.rule_type} size="small" variant="outlined" />
+                        {!v.is_active && <Chip label="inactiv" size="small" color="default" />}
+                      </Stack>
+                      <Typography variant="caption" color="text.secondary">
+                        {new Date(v.created_at).toLocaleString('ro-RO')}
+                        {v.changed_by_name ? ` · de ${v.changed_by_name}` : ''}
+                        {v.change_reason ? ` · "${v.change_reason}"` : ''}
+                      </Typography>
+                      <Box mt={0.5}>
+                        <Typography variant="caption" color="text.secondary">Condiții: </Typography>
+                        <Box component="pre" sx={{ display: 'inline', fontSize: 11, color: 'text.primary' }}>
+                          {JSON.stringify(v.conditions, null, 0).substring(0, 120)}
+                          {JSON.stringify(v.conditions, null, 0).length > 120 ? '…' : ''}
+                        </Box>
+                      </Box>
+                      <Box>
+                        <Typography variant="caption" color="text.secondary">Acțiuni: </Typography>
+                        <Box component="pre" sx={{ display: 'inline', fontSize: 11, color: 'text.primary' }}>
+                          {JSON.stringify(v.actions, null, 0).substring(0, 120)}
+                          {JSON.stringify(v.actions, null, 0).length > 120 ? '…' : ''}
+                        </Box>
+                      </Box>
+                    </Box>
+                    <Tooltip title={`Restaurează la versiunea ${v.version}`}>
+                      <IconButton size="small" color="warning" onClick={() => setRestoreConfirm(v)}>
+                        <RestoreIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Box>
+              ))}
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenVersions(false)}>Închide</Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* ── Dialog confirmare restore ── */}
+      <Dialog open={!!restoreConfirm} onClose={() => setRestoreConfirm(null)} maxWidth="xs">
+        <DialogTitle>Confirmare restaurare</DialogTitle>
+        <DialogContent>
+          <Typography>
+            Restaurezi regula la <strong>versiunea {restoreConfirm?.version}</strong>?
+            Versiunea curentă va fi salvată automat în istoric.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setRestoreConfirm(null)}>Anulează</Button>
+          <Button color="warning" variant="contained" startIcon={<RestoreIcon />}
+            onClick={() => restoreConfirm && handleRestore(restoreConfirm)}>
+            Restaurează
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Box>
   );
 }
