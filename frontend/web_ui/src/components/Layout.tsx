@@ -17,6 +17,7 @@ import ExpandMore from '@mui/icons-material/ExpandMore';
 import SettingsApplicationsIcon from '@mui/icons-material/SettingsApplications';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
 import PlaylistAddCheckIcon from '@mui/icons-material/PlaylistAddCheck';
+import FileUploadIcon from '@mui/icons-material/FileUpload';
 import { useAuth } from '../hooks/useAuth';
 
 const drawerWidth = 260;
@@ -40,6 +41,7 @@ const menuGroups: MenuGroupDef[] = [
       { text: 'Setări', icon: <SettingsApplicationsIcon />, path: '/initial-setup', roles: ['admin', 'manager'] },
       { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config', roles: ['admin', 'manager'] },
       { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori', roles: ['admin'] },
+      { text: 'Import Stoc Inițial', icon: <FileUploadIcon />, path: '/import-stoc', roles: ['admin', 'manager'] },
       { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports', roles: ['admin', 'manager'] },
     ],
   },

@@ -20,6 +20,7 @@ import { ShipmentsPage } from './pages/ShipmentsPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { WarehouseConfigPage } from './pages/WarehouseConfigPage';
 import PickJobsPage from './pages/PickJobsPage';
+import { StocImportPage } from './pages/StocImportPage';
 import theme from './theme';
 
 function App() {
@@ -176,6 +177,16 @@ function App() {
                 <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <PickJobsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/import-stoc"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <StocImportPage />
                   </Layout>
                 </ProtectedRoute>
               }
