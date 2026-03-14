@@ -153,6 +153,7 @@ const receptieRoutes = require('./routes/receptie');
 const purchaseOrdersRoutes = require('./routes/purchaseOrders');
 const goodsReceiptsRoutes = require('./routes/goodsReceipts');
 const drumTypesRoutes = require('./routes/drumTypes');
+const pickNotesRoutes = require('./routes/pickNotes');
 
 // API routes
 app.use('/api/v1/products', productsRoutes);
@@ -168,6 +169,7 @@ app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1', importRoutes);
 app.use('/api/v1', ordersRoutes);
 app.use('/api/v1', pickingRoutes);
+app.use('/api/v1', pickNotesRoutes);
 
 // Legacy compatibility endpoint
 app.get('/api/v1/inventory', async (req, res) => {

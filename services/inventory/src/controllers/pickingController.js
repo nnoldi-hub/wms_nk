@@ -41,6 +41,25 @@ function getUserId(req) {
   return u.sub || u.username || u.email || u.id || null;
 }
 
+// ─── Helper audit wms_ops_audit ───────────────────────────────────────────────
+async function auditOp(action_type, entity_type, entity_id, entity_code, changes, extra_info, req) {
+  try {
+    const user = req?.user || {};
+    const user_id = user.userId || user.id || user.sub || 'system';
+    const user_name = user.username || user.email || user_id;
+    const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || null)?.split?.(',')[0]?.trim() || null;
+    await req.db.query(
+      `INSERT INTO wms_ops_audit (action_type, entity_type, entity_id, entity_code, service, changes, extra_info, user_id, user_name, ip_address)
+       VALUES ($1, $2, $3, $4, 'inventory', $5, $6, $7, $8, $9::inet)`,
+      [action_type, entity_type, entity_id || null, entity_code || null,
+       changes ? JSON.stringify(changes) : null, extra_info ? JSON.stringify(extra_info) : null,
+       user_id, user_name, ip]
+    );
+  } catch (auditErr) {
+    console.warn('wms_ops_audit insert failed (non-critical):', auditErr.message);
+  }
+}
+
 module.exports = {
   // Create a picking job from a sales order and generate items per line
   async allocateFromOrder(req, res) {
@@ -364,6 +383,11 @@ module.exports = {
         await client.query('UPDATE inventory_reservations SET released_at = now(), reserved_qty = 0 WHERE id = $1', [r.id]);
       }
       await client.query('COMMIT');
+      await auditOp('PICKING_COMPLETE', 'picking_job', id, upd.rows[0]?.number,
+        { items_count: items.rowCount, forced: !!force },
+        { assigned_to: upd.rows[0]?.assigned_to || null },
+        req
+      );
       return res.json({ success: true, data: upd.rows[0] });
     } catch (e) {
       await client.query('ROLLBACK');
@@ -597,6 +621,266 @@ module.exports = {
       return res.json({ success: true, data: rows.rows, pagination: { page: Number(page), limit: Number(limit), total: total.rows[0].c } });
     } catch (e) {
       return res.status(500).json({ success: false, message: e.message });
+    }
+  },
+
+  // Supervisor: reassign all items of a job to another worker
+  async reassignJob(req, res) {
+    const client = await req.db.connect();
+    try {
+      const { id } = req.params;
+      const { assigned_to } = req.body || {};
+      if (!assigned_to) return res.status(400).json({ success: false, message: 'assigned_to is required' });
+
+      await client.query('BEGIN');
+      const j = await client.query('SELECT id, status FROM picking_jobs WHERE id = $1', [id]);
+      if (j.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Job not found' }); }
+      const job = j.rows[0];
+      if (['COMPLETED', 'CANCELLED'].includes(job.status)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: `Cannot reassign a ${job.status} job` });
+      }
+
+      // Reassign job header
+      await client.query('UPDATE picking_jobs SET assigned_to = $1, status = CASE WHEN status = \'NEW\' THEN \'NEW\' ELSE status END WHERE id = $2', [assigned_to, id]);
+      // Reassign all pending/assigned items
+      await client.query(
+        `UPDATE picking_job_items SET assigned_to = $1, assigned_at = now()
+         WHERE job_id = $2 AND status NOT IN ('DONE','CANCELLED')`,
+        [assigned_to, id]
+      );
+
+      await client.query('COMMIT');
+      const updated = await req.db.query('SELECT * FROM picking_jobs WHERE id = $1', [id]);
+      return res.json({ success: true, data: updated.rows[0] });
+    } catch (e) {
+      await client.query('ROLLBACK');
+      return res.status(500).json({ success: false, message: e.message });
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * POST /pick-jobs/:id/move-to-shipping
+   * Mută un picking job completat în zona de expediere.
+   * - Actualizează picking_jobs.status → 'DISPATCHED'
+   * - Actualizează sales_orders.status → 'READY_FOR_LOADING' (dacă are order_id)
+   */
+  async moveToShipping(req, res) {
+    const client = await req.db.connect();
+    try {
+      const { id } = req.params;
+      await client.query('BEGIN');
+      const j = await client.query('SELECT * FROM picking_jobs WHERE id = $1 FOR UPDATE', [id]);
+      if (j.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'Job negasit' });
+      }
+      const job = j.rows[0];
+      if (!['COMPLETED', 'IN_PROGRESS'].includes(job.status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, message: `Job trebuie sa fie COMPLETED sau IN_PROGRESS (actual: ${job.status})` });
+      }
+
+      // Actualizează job
+      const updJob = await client.query(
+        `UPDATE picking_jobs SET status = 'DISPATCHED', notes = COALESCE(NULLIF(notes,''), '') || ' [Mutat expediere]' WHERE id = $1 RETURNING *`,
+        [id]
+      );
+
+      let updOrder = null;
+      if (job.order_id) {
+        updOrder = await client.query(
+          `UPDATE sales_orders SET status = 'READY_FOR_LOADING' WHERE id = $1 AND status NOT IN ('LOADED','DELIVERED','CANCELLED') RETURNING *`,
+          [job.order_id]
+        );
+      }
+
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        data: {
+          job: updJob.rows[0],
+          order: updOrder?.rows[0] ?? null
+        }
+      });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return res.status(500).json({ success: false, message: e.message });
+    } finally {
+      client.release();
+    }
+  },
+
+  /**
+   * Înregistrează o tăiere fizică dintr-un lot de produs.
+   * POST /pick-jobs/:id/items/:itemId/cut   * Body: { cut_qty, source_batch_id, remainder_location_id? }
+   *
+   * Fluxul:
+   * 1. Verifică job + item din picking
+   * 2. Verifică batch-ul sursă
+   * 3. Calculează restul = batch.current_quantity - cut_qty
+   * 4. Dacă există rest, creează un batch NOU în stoc pentru restul de cablu
+   * 5. Înregistrează transformarea în product_transformations (tip CUT)
+   * 6. Marchează batch-ul original ca EMPTY (consumat fizic)
+   * 7. Marchează picking item ca DONE cu picked_qty = cut_qty
+   */
+  async cutItem(req, res) {
+    const client = await req.db.connect();
+    try {
+      const { id, itemId } = req.params;
+      const { cut_qty, source_batch_id, remainder_location_id } = req.body || {};
+
+      const cutQty = Number(cut_qty);
+      if (!source_batch_id || !Number.isFinite(cutQty) || cutQty <= 0) {
+        return res.status(400).json({ success: false, message: 'Furnizati source_batch_id si cut_qty pozitiv' });
+      }
+
+      await client.query('BEGIN');
+
+      // 1. Job valid
+      const jobRes = await client.query('SELECT * FROM picking_jobs WHERE id = $1 FOR UPDATE', [id]);
+      if (jobRes.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'Job negasit' });
+      }
+      const job = jobRes.rows[0];
+      if (!['NEW', 'ASSIGNED', 'IN_PROGRESS'].includes(job.status)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, message: `Nu se poate taia pe job cu status ${job.status}` });
+      }
+
+      // 2. Item valid
+      const itemRes = await client.query('SELECT * FROM picking_job_items WHERE id = $1 AND job_id = $2 FOR UPDATE', [itemId, id]);
+      if (itemRes.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'Linie negasita' });
+      }
+      const item = itemRes.rows[0];
+      if (item.status === 'DONE') {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ success: false, message: 'Linia este deja finalizata' });
+      }
+
+      // 3. Batch sursă
+      const batchRes = await client.query('SELECT * FROM product_batches WHERE id = $1 FOR UPDATE', [source_batch_id]);
+      if (batchRes.rowCount === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ success: false, message: 'Batch sursa negasit' });
+      }
+      const batch = batchRes.rows[0];
+
+      const batchQty = Number(batch.current_quantity);
+      if (cutQty > batchQty + 0.001) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({
+          success: false,
+          message: `Cant. taiata (${cutQty}) depaseste cantitatea disponibila in batch (${batchQty})`
+        });
+      }
+
+      const remainder = Math.max(0, batchQty - cutQty);
+
+      // 4. Creeaza batch NOU pentru rest (dacă există rest semnificativ)
+      let newBatch = null;
+      if (remainder > 0.001) {
+        const ratio = remainder / batchQty;
+        const remainderWeight = batch.weight_kg ? (Number(batch.weight_kg) * ratio).toFixed(3) : null;
+        const remainderLength = batch.length_meters ? (Number(batch.length_meters) * ratio).toFixed(2) : null;
+        const locationForRemainder = remainder_location_id || batch.location_id;
+
+        const newBatchRes = await client.query(
+          `INSERT INTO product_batches
+             (product_sku, unit_id, initial_quantity, current_quantity, length_meters,
+              weight_kg, status, location_id, source_batch_id, notes)
+           VALUES ($1, $2, $3, $3, $4, $5, 'INTACT', $6, $7, $8)
+           RETURNING *`,
+          [
+            batch.product_sku,
+            batch.unit_id,
+            remainder,
+            remainderLength,
+            remainderWeight,
+            locationForRemainder,
+            batch.id,
+            `Rest din taiere - Job ${job.number} - ${item.product_sku || ''} - Lot: ${item.lot_label || batch.batch_number}`
+          ]
+        );
+        newBatch = newBatchRes.rows[0];
+      }
+
+      // 5. Înregistrează transformarea (tip CUT)
+      const transRes = await client.query(
+        `INSERT INTO product_transformations
+           (type, source_batch_id, source_quantity, result_batch_id, result_quantity,
+            waste_quantity, selection_method, notes)
+         VALUES ('CUT', $1, $2, $3, $4, 0, 'MANUAL', $5)
+         RETURNING *`,
+        [
+          batch.id,
+          batchQty,
+          newBatch?.id || null,
+          remainder,
+          `Picking Job ${job.number} - Taiere ${cutQty} ${item.uom || ''} din batch ${batch.batch_number}`
+        ]
+      );
+      const transformation = transRes.rows[0];
+
+      // 6. Marchează batch-ul original ca EMPTY + leagă transformarea
+      await client.query(
+        `UPDATE product_batches
+         SET status = 'EMPTY', current_quantity = 0, emptied_at = now(),
+             transformation_id = $1, updated_at = now()
+         WHERE id = $2`,
+        [transformation.id, batch.id]
+      );
+
+      // 7. Actualizează picking item
+      const newExtraInfo = Object.assign({}, item.extra_info || {}, {
+        cut_qty: cutQty,
+        remainder_qty: remainder,
+        remainder_batch_id: newBatch?.id || null,
+        remainder_batch_number: newBatch?.batch_number || null,
+        source_batch_id: batch.id,
+        source_batch_number: batch.batch_number,
+        transformation_id: transformation.id
+      });
+      const updatedItem = await client.query(
+        `UPDATE picking_job_items
+         SET picked_qty = $1, status = 'DONE',
+             started_at = COALESCE(started_at, now()), completed_at = now(),
+             extra_info = $2::jsonb
+         WHERE id = $3 RETURNING *`,
+        [cutQty, JSON.stringify(newExtraInfo), itemId]
+      );
+
+      // 8. Aduce job-ul în IN_PROGRESS dacă era NEW/ASSIGNED
+      if (['NEW', 'ASSIGNED'].includes(job.status)) {
+        await client.query(
+          `UPDATE picking_jobs SET status = 'IN_PROGRESS', started_at = now() WHERE id = $1`,
+          [id]
+        );
+      }
+
+      await client.query('COMMIT');
+      return res.json({
+        success: true,
+        data: {
+          item: updatedItem.rows[0],
+          transformation,
+          remainder_batch: newBatch,
+          source_batch_number: batch.batch_number,
+          cut_qty: cutQty,
+          remainder_qty: remainder
+        }
+      });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      console.error('[cutItem] Error:', e?.message, e?.stack);
+      return res.status(500).json({ success: false, message: e.message });
+    } finally {
+      client.release();
     }
   }
 };

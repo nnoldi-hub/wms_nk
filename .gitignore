@@ -38,6 +38,14 @@ build/
 *.temp
 token.txt
 
+# Backup files
+*.bak
+*.backup
+
+# Draft/temp markdown files
+**/readme nou.md
+**/readme\ nou.md
+
 # Docker volumes
 data/
 postgres-data/

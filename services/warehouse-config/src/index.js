@@ -1,4 +1,5 @@
 require('dotenv').config();
+const http = require('http');
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -13,8 +14,10 @@ const routes = require('./routes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const swaggerUi = require('swagger-ui-express');
 const openapi = require('./docs/openapi');
+const { attachWebSocketServer } = require('./services/wsNotifications');
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
 app.use(helmet());
@@ -180,8 +183,11 @@ const gracefulShutdown = async () => {
     
     await redis.quit();
     logger.info('Redis connection closed');
-    
-    process.exit(0);
+
+    httpServer.close(() => {
+      logger.info('HTTP/WS server closed');
+      process.exit(0);
+    });
   } catch (error) {
     logger.error('Error during graceful shutdown:', error);
     process.exit(1);
@@ -207,10 +213,14 @@ const startServer = async () => {
     await redis.ping();
     logger.info('Redis connection established');
     
-    app.listen(PORT, () => {
+    // Atașează WebSocket server la același port HTTP
+    attachWebSocketServer(httpServer);
+
+    httpServer.listen(PORT, () => {
       logger.info(`Warehouse Config Service running on port ${PORT}`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
       logger.info(`CORS enabled for origins: ${allowedOrigins.join(', ')}`);
+      logger.info(`WebSocket endpoint: ws://localhost:${PORT}/ws`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
@@ -223,4 +233,4 @@ if (process.env.NODE_ENV !== 'test') {
   startServer();
 }
 
-module.exports = app;
+module.exports = { app, httpServer };

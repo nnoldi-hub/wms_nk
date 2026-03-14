@@ -9,4 +9,8 @@ router.get('/:id', authenticate, userController.getUserById);
 router.put('/:id', authenticate, userController.updateUser);
 router.delete('/:id', authenticate, authorize(['admin']), userController.deleteUser);
 
+// Permisiuni granulare
+router.get('/:id/permissions', authenticate, userController.getPermissions);
+router.put('/:id/permissions', authenticate, authorize(['admin']), userController.updatePermissions);
+
 module.exports = router;

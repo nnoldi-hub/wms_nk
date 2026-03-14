@@ -62,4 +62,14 @@ export const usersService = {
   getRoles: () => {
     return ['admin', 'manager', 'operator'];
   },
+
+  getPermissions: async (id: string) => {
+    const response = await apiClient.get(`${AUTH_API}/api/v1/users/${id}/permissions`);
+    return response.data.data || {};
+  },
+
+  updatePermissions: async (id: string, permissions: Record<string, Record<string, boolean>>) => {
+    const response = await apiClient.put(`${AUTH_API}/api/v1/users/${id}/permissions`, permissions);
+    return response.data.data || {};
+  },
 };

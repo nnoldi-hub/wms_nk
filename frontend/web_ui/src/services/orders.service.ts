@@ -25,6 +25,9 @@ export interface Order {
   agent_name?: string;
   total_weight?: number;
   status?: string;
+  priority?: 'NORMAL' | 'HIGH' | 'URGENT';
+  delivery_date?: string;
+  erp_ref?: string;
   created_at?: string;
   lines?: OrderLine[];
 }
@@ -44,10 +47,13 @@ client.interceptors.request.use((config) => {
 });
 
 class OrdersService {
-  async list(opts?: { page?: number; limit?: number }): Promise<{ data: Order[]; pagination?: { total: number; page?: number; limit?: number } }> {
+  async list(opts?: { page?: number; limit?: number; status?: string; priority?: string; overdue?: boolean }): Promise<{ data: Order[]; pagination?: { total: number; page?: number; limit?: number } }> {
     const params: Record<string, unknown> = {};
     if (opts?.page) params.page = opts.page;
     if (opts?.limit) params.limit = opts.limit;
+    if (opts?.status) params.status = opts.status;
+    if (opts?.priority) params.priority = opts.priority;
+    if (opts?.overdue) params.overdue = 'true';
     const response = await client.get('/orders', { params });
     const body = response.data;
     if (body && typeof body === 'object' && 'data' in body) {

@@ -18,4 +18,7 @@ export default defineConfig({
       usePolling: true, // Necesar pentru Docker pe Windows
     },
   },
+  optimizeDeps: {
+    exclude: ['pdfjs-dist'],
+  },
 })

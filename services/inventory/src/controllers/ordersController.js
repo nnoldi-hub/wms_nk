@@ -137,14 +137,41 @@ async function importCsv(req, res) {
 
 async function listOrders(req, res) {
   try {
-    const { page = 1, limit = 25 } = req.query;
+    const { page = 1, limit = 25, status, priority, overdue } = req.query;
     const offset = (Number(page) - 1) * Number(limit);
-    const total = await req.db.query('SELECT COUNT(*)::int AS c FROM sales_orders');
+
+    const conditions = [];
+    const params = [];
+
+    if (status) {
+      params.push(status);
+      conditions.push(`status = $${params.length}`);
+    }
+    if (priority) {
+      params.push(priority);
+      conditions.push(`priority = $${params.length}`);
+    }
+    if (overdue === 'true' || overdue === '1') {
+      conditions.push(`delivery_date < CURRENT_DATE AND status NOT IN ('SHIPPED','CANCELLED')`);
+    }
+
+    const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    const totalRes = await req.db.query(`SELECT COUNT(*)::int AS c FROM sales_orders ${where}`, params);
+    const dataParams = [...params, limit, offset];
     const rows = await req.db.query(
-      `SELECT * FROM sales_orders ORDER BY created_at DESC LIMIT $1 OFFSET $2`,
-      [limit, offset]
+      `SELECT * FROM sales_orders ${where} ORDER BY
+         CASE priority WHEN 'URGENT' THEN 0 WHEN 'HIGH' THEN 1 ELSE 2 END,
+         delivery_date ASC NULLS LAST,
+         created_at DESC
+       LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+      dataParams
     );
-    return res.json({ success: true, data: rows.rows, pagination: { page: Number(page), limit: Number(limit), total: total.rows[0].c } });
+    return res.json({
+      success: true,
+      data: rows.rows,
+      pagination: { page: Number(page), limit: Number(limit), total: totalRes.rows[0].c },
+    });
   } catch (e) {
     return res.status(500).json({ success: false, message: e.message });
   }
@@ -341,6 +368,48 @@ module.exports = {
       doc.text(`Agent: ${order.agent_name || ''}`);
 
       doc.end();
+    } catch (e) {
+      return res.status(500).json({ success: false, message: e.message });
+    }
+  },
+
+  /**
+   * PATCH /orders/:id/status
+   * Actualizează statusul unei comenzi (READY_FOR_LOADING, LOADED, DELIVERED etc.)
+   */
+  async updateStatus(req, res) {
+    try {
+      const { id } = req.params;
+      const { status, notes, vehicle_number, driver_name } = req.body || {};
+
+      const ALLOWED = ['PENDING', 'CONFIRMED', 'IN_PROGRESS', 'PICKING', 'READY_FOR_LOADING', 'LOADED', 'SHIPPED', 'DELIVERED', 'CANCELLED'];
+      if (!status || !ALLOWED.includes(status)) {
+        return res.status(400).json({ success: false, message: `Status invalid. Valori permise: ${ALLOWED.join(', ')}` });
+      }
+
+      const setClauses = ['status = $1'];
+      const params = [status, id];
+      let idx = 3;
+
+      if (notes) { setClauses.push(`internal_notes = $${idx++}`); params.splice(-1, 0, notes); }
+
+      if (status === 'LOADED') {
+        setClauses.push(`loaded_at = NOW()`);
+        const loadedBy = req.user?.username || req.user?.email || null;
+        if (loadedBy) { setClauses.push(`loaded_by = $${idx++}`); params.splice(-1, 0, loadedBy); }
+        if (vehicle_number) { setClauses.push(`vehicle_number = $${idx++}`); params.splice(-1, 0, vehicle_number); }
+        if (driver_name)    { setClauses.push(`driver_name = $${idx++}`); params.splice(-1, 0, driver_name); }
+      }
+
+      if (status === 'DELIVERED') {
+        setClauses.push(`delivered_at = NOW()`);
+      }
+
+      const sql = `UPDATE sales_orders SET ${setClauses.join(', ')} WHERE id = $2 RETURNING *`;
+      const upd = await req.db.query(sql, params);
+
+      if (upd.rowCount === 0) return res.status(404).json({ success: false, message: 'Comanda negasita' });
+      return res.json({ success: true, data: upd.rows[0] });
     } catch (e) {
       return res.status(500).json({ success: false, message: e.message });
     }

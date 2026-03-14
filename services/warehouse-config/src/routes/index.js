@@ -168,6 +168,9 @@ router.delete('/locations/:id',
 // GET /api/v1/locations/:id/barcode - Generate barcode for location
 router.get('/locations/:id/barcode', locationController.generateBarcode);
 
+// PATCH /api/v1/locations/:id/capacity - Update capacity constraints (Faza 2.4)
+router.patch('/locations/:id/capacity', managerOrAdmin, locationController.updateCapacity);
+
 // PATCH /api/v1/locations/:id/coordinates - Actualizare coordonate (Sprint 8)
 router.patch('/locations/:id/coordinates', managerOrAdmin, locationController.patchCoordinates);
 
@@ -372,6 +375,7 @@ router.delete('/warehouse-settings/:id', adminOnly, warehouseSettingsController.
 // ============================================================================
 const ruleController = require('../controllers/ruleController');
 const auditController = require('../controllers/auditController');
+const opsAuditController = require('../controllers/opsAuditController');
 const reportsController = require('../controllers/reportsController');
 
 // GET  /api/v1/rules                 - listare reguli (filtrare ?scope=PICKING&is_active=true)
@@ -418,6 +422,17 @@ router.get('/rules/audit-log/stats', managerOrAdmin, auditController.stats);
 // POST /api/v1/rules/audit-log       - inserare manuală (pentru servicii externe)
 router.post('/rules/audit-log', managerOrAdmin, auditController.create);
 
+// ─── Ops Audit Log (locații, loturi, picking) ────────────────────────────────
+
+// POST /api/v1/audit/ui-event       - acțiuni utilizator din interfața web
+router.post('/audit/ui-event', opsAuditController.createUiEvent);
+
+// GET  /api/v1/audit/events          - toate evenimentele WMS cu filtrare + paginare
+router.get('/audit/events', managerOrAdmin, opsAuditController.list);
+
+// GET  /api/v1/audit/events/stats    - statistici 30 zile (top acțiuni, servicii, utilizatori)
+router.get('/audit/events/stats', managerOrAdmin, opsAuditController.stats);
+
 // ─── Sugestii ────────────────────────────────────────────────────────────────
 
 // POST /api/v1/suggest/putaway       - sugestie locație la recepție
@@ -439,5 +454,19 @@ router.get('/reports/rule-engine/underused-locations', managerOrAdmin, reportsCo
 
 // GET /api/v1/reports/rule-engine/large-remnants
 router.get('/reports/rule-engine/large-remnants', managerOrAdmin, reportsController.largeRemnants);
+
+// ─── Validare configurare (Faza 2.3) ─────────────────────────────────────────
+const validationController = require('../controllers/validationController');
+// GET /api/v1/rules/validate?warehouse_id=...
+router.get('/rules/validate', managerOrAdmin, validationController.validate);
+// GET /api/v1/rules/validate/summary
+router.get('/rules/validate/summary', managerOrAdmin, validationController.summary);
+// GET /api/v1/validate/setup-check?warehouse_id=...  (Faza 3.2)
+router.get('/validate/setup-check', managerOrAdmin, validationController.validateWarehouseConfig);
+
+// ─── Reguli Dinamice (Faza 4.1) ──────────────────────────────────────────────
+const dynamicRulesController = require('../controllers/dynamicRulesController');
+// GET /api/v1/rules/dynamic/alerts?warehouse_id=&zone_full_threshold=85&reel_low_threshold=50&rotation_days=7&expiry_warning_days=30
+router.get('/rules/dynamic/alerts', managerOrAdmin, dynamicRulesController.getAlerts);
 
 module.exports = router;

@@ -556,7 +556,7 @@ services:
   # ERP Connector Service
   erp-connector:
     build:
-      context: ./services/erp_connector
+      context: ./services/erp-connector
       dockerfile: Dockerfile
     container_name: wms-erp-connector
     restart: unless-stopped
@@ -579,9 +579,9 @@ services:
       RETRY_BACKOFF_MS: 1000
       LOG_LEVEL: debug
     ports:
-      - "3015:3000"
+      - "3018:3000"
     volumes:
-      - ./services/erp_connector:/app
+      - ./services/erp-connector:/app
       - /app/node_modules
       - erp_data:/app/data
     networks:

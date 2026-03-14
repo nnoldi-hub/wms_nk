@@ -6,6 +6,8 @@ const OrdersController = require('../controllers/ordersController');
 router.get('/orders', OrdersController.listOrders);
 router.get('/orders/:id', OrdersController.getOrder);
 router.get('/orders/:id/pick-note.pdf', OrdersController.pickNotePdf);
+// Actualizare status comandă (READY_FOR_LOADING, LOADED, DELIVERED etc.)
+router.patch('/orders/:id/status', OrdersController.updateStatus);
 
 // CSV import
 router.post('/orders/import-csv', OrdersController.upload.single('file'), OrdersController.importCsv);

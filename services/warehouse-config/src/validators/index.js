@@ -342,7 +342,7 @@ const validateQuery = (schema) => {
 const buildListQuerySchema = (sortByValues, extra = {}) => {
   return Joi.object({
     page: Joi.number().integer().min(1).default(1),
-    limit: Joi.number().integer().min(1).max(100).default(25),
+    limit: Joi.number().integer().min(1).max(1000).default(25),
     sortBy: Joi.string().valid(...sortByValues).default(sortByValues[0]),
     sortDir: Joi.string().valid('asc', 'desc').default('asc'),
     ...extra

@@ -85,6 +85,33 @@ exports.getLocationById = async (req, res) => {
   }
 };
 
+// GET /api/v1/locations/by-code/:code — cautare locatie dupa location_code sau id (pentru scan QR)
+exports.getLocationByCode = async (req, res) => {
+  try {
+    const { code } = req.params;
+    // In schema noastra id = location_code (ex: HALA-R01-P01)
+    const result = await req.db.query(
+      `SELECT l.*,
+         COUNT(ii.id)::int AS item_count,
+         COALESCE(SUM(ii.quantity), 0) AS total_quantity
+       FROM locations l
+       LEFT JOIN inventory_items ii ON ii.location_id = l.id
+       WHERE l.location_code = $1 OR l.id = $1
+       GROUP BY l.id, l.zone, l.rack, l.position, l.allowed_types,
+                l.capacity_m3, l.is_active, l.created_at, l.updated_at
+       LIMIT 1`,
+      [code]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ success: false, message: 'Locatie negasita: ' + code });
+    }
+    res.json({ success: true, data: result.rows[0] });
+  } catch (error) {
+    req.logger.error('Get location by code error:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+};
+
 exports.createLocation = async (req, res) => {
   try {
     const { id, zone, rack, position, allowed_types, capacity_m3 } = req.body;

@@ -116,23 +116,23 @@ class ReportsController {
       const result = await db.query(
         `SELECT
            l.id,
-           l.code                                    AS location_code,
-           wz.code                                   AS zone_code,
-           w.name                                    AS warehouse_name,
+           l.location_code                              AS location_code,
+           wz.zone_code                                  AS zone_code,
+           w.warehouse_name                              AS warehouse_name,
            l.status,
            l.suggestion_label,
            l.current_occupancy_percent,
-           MAX(m.created_at)                         AS last_movement_at,
-           COUNT(m.id)                               AS total_movements,
-           EXTRACT(DAY FROM NOW() - MAX(m.created_at)) AS days_inactive
+           MAX(bsh.created_at)                           AS last_movement_at,
+           COUNT(bsh.id)                                 AS total_movements,
+           EXTRACT(DAY FROM NOW() - MAX(bsh.created_at)) AS days_inactive
          FROM locations l
          LEFT JOIN warehouse_zones wz ON wz.id = l.zone_id
          LEFT JOIN warehouses w       ON w.id = wz.warehouse_id
-         LEFT JOIN inventory_movements m ON m.to_location_id = l.id OR m.from_location_id = l.id
+         LEFT JOIN batch_state_history bsh ON bsh.to_location_id = l.id OR bsh.from_location_id = l.id
          WHERE l.status = 'AVAILABLE'
            ${warehouseFilter}
-         GROUP BY l.id, l.code, wz.code, w.name, l.status, l.suggestion_label, l.current_occupancy_percent
-         HAVING MAX(m.created_at) < $1 OR MAX(m.created_at) IS NULL
+         GROUP BY l.id, l.location_code, wz.zone_code, w.warehouse_name, l.status, l.suggestion_label, l.current_occupancy_percent
+         HAVING MAX(bsh.created_at) < $1 OR MAX(bsh.created_at) IS NULL
          ORDER BY days_inactive DESC NULLS FIRST
          LIMIT $2`,
         params
@@ -192,9 +192,9 @@ class ReportsController {
                ELSE 0
              END, 1
            )                                                           AS percent_remaining,
-           l.code                                                      AS location_code,
-           wz.code                                                     AS zone_code,
-           w.name                                                      AS warehouse_name,
+           l.location_code                                            AS location_code,
+           wz.zone_code                                                AS zone_code,
+           w.warehouse_name                                            AS warehouse_name,
            EXTRACT(DAY FROM NOW() - pb.received_at)                   AS age_days
          FROM product_batches pb
          LEFT JOIN locations l    ON l.id = pb.location_id
@@ -203,7 +203,7 @@ class ReportsController {
          WHERE pb.current_quantity >= $1
            AND pb.initial_quantity > 0
            AND (pb.current_quantity / pb.initial_quantity) * 100 <= $2
-           AND pb.status IN ('PARTIAL', 'ACTIVE')
+           AND pb.status IN ('INTACT', 'CUT', 'REPACKED')
            AND pb.received_at < $3
          ORDER BY pb.current_quantity DESC
          LIMIT $4`,
@@ -225,7 +225,7 @@ class ReportsController {
          WHERE pb.current_quantity >= $1
            AND pb.initial_quantity > 0
            AND (pb.current_quantity / pb.initial_quantity) * 100 <= $2
-           AND pb.status IN ('PARTIAL', 'ACTIVE')`,
+           AND pb.status IN ('INTACT', 'CUT', 'REPACKED')`,
         [parseFloat(min_meters), parseFloat(max_percent)]
       );
 

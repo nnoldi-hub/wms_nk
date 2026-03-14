@@ -82,6 +82,38 @@ class PickingService {
     return response.data;
   }
 
+  async reassign(id: string, assignedTo: string) {
+    const response = await client.post(`/pick-jobs/${id}/reassign`, { assigned_to: assignedTo });
+    return response.data;
+  }
+
+  async cutItem(id: string, itemId: string, payload: {
+    cut_qty: number;
+    source_batch_id: string;
+    remainder_location_id?: string;
+  }) {
+    const response = await client.post(`/pick-jobs/${id}/items/${itemId}/cut`, payload);
+    return response.data as {
+      success: boolean;
+      data: {
+        item: PickJobItem;
+        transformation: { id: string; transformation_number: string };
+        remainder_batch: { id: string; batch_number: string; current_quantity: number } | null;
+        source_batch_number: string;
+        cut_qty: number;
+        remainder_qty: number;
+      };
+    };
+  }
+
+  async moveToShipping(id: string) {
+    const response = await client.post(`/pick-jobs/${id}/move-to-shipping`);
+    return response.data as {
+      success: boolean;
+      data: { job: PickJob; order: { id: string; number: string; status: string } | null };
+    };
+  }
+
   getLabelsUrl(id: string) {
     return `${INVENTORY_API}/pick-jobs/${id}/labels.pdf`;
   }

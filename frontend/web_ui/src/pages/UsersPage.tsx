@@ -24,7 +24,9 @@ import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
+import SecurityIcon from '@mui/icons-material/Security';
 import { usersService, type User, type CreateUserDto, type UpdateUserDto } from '../services/users.service';
+import PermissionsDialog from '../components/PermissionsDialog';
 
 export const UsersPage = () => {
   const [users, setUsers] = useState<GridRowsProp>([]);
@@ -34,6 +36,7 @@ export const UsersPage = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [permissionsUser, setPermissionsUser] = useState<User | null>(null);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' as 'success' | 'error' });
 
   const [formData, setFormData] = useState<CreateUserDto>({
@@ -172,7 +175,7 @@ export const UsersPage = () => {
     {
       field: 'actions',
       headerName: 'Actions',
-      width: 120,
+      width: 150,
       sortable: false,
       renderCell: (params) => (
         <Box>
@@ -181,6 +184,14 @@ export const UsersPage = () => {
           </IconButton>
           <IconButton size="small" onClick={() => setDeleteConfirm(params.row.id)}>
             <DeleteIcon fontSize="small" />
+          </IconButton>
+          <IconButton
+            size="small"
+            color="primary"
+            title="Permisiuni granulare"
+            onClick={() => setPermissionsUser(params.row as User)}
+          >
+            <SecurityIcon fontSize="small" />
           </IconButton>
         </Box>
       ),
@@ -317,6 +328,12 @@ export const UsersPage = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      <PermissionsDialog
+        user={permissionsUser}
+        open={permissionsUser !== null}
+        onClose={() => setPermissionsUser(null)}
+      />
     </Box>
   );
 };

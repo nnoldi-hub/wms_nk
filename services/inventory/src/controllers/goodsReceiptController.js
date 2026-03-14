@@ -293,12 +293,12 @@ class GoodsReceiptController {
         [nirNumber, id]
       );
 
-      // Actualizeaza statusul comenzii furnizor daca este legata
+      // Actualizeaza statusul comenzii furnizor daca este legata → RECEIVED
       if (gr.supplier_order_id) {
         await client.query(
           `UPDATE supplier_orders
-           SET status = 'RECEIVING', updated_at = NOW()
-           WHERE id = $1 AND status IN ('CONFIRMED', 'DRAFT')`,
+           SET status = 'RECEIVED', updated_at = NOW()
+           WHERE id = $1 AND status NOT IN ('CLOSED','CANCELLED')`,
           [gr.supplier_order_id]
         );
       }

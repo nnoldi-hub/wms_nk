@@ -1,6 +1,27 @@
 const { pool } = require('../config/database');
 const logger = require('../utils/logger');
 
+// ─── Helper audit ───────────────────────────────────────
+async function auditOp(action_type, entity_type, entity_id, entity_code, changes, extra_info, req) {
+  try {
+    const user = req?.user || {};
+    const user_id = user.userId || user.id || 'system';
+    const user_name = user.username || user.email || user_id;
+    const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || null)?.split?.(',')[0]?.trim() || null;
+    await pool.query(
+      `INSERT INTO wms_ops_audit
+         (action_type, entity_type, entity_id, entity_code, service, changes, extra_info, user_id, user_name, ip_address)
+       VALUES ($1, $2, $3, $4, 'inventory', $5, $6, $7, $8, $9::inet)`,
+      [action_type, entity_type, entity_id || null, entity_code || null,
+       changes ? JSON.stringify(changes) : null,
+       extra_info ? JSON.stringify(extra_info) : null,
+       user_id, user_name, ip]
+    );
+  } catch (auditErr) {
+    logger.warn('wms_ops_audit insert failed (non-critical):', auditErr.message);
+  }
+}
+
 class ReceptieController {
   // GET /api/v1/receptie/units
   // Returns all product_units (DRUM, ROLL, BOX, etc.) with their UUIDs
@@ -96,6 +117,11 @@ class ReceptieController {
 
       const batch = result.rows[0];
       logger.info(`Receptie: batch creat ${batch.batch_number} pentru ${product_sku}`);
+      await auditOp('RECEIPT_BATCH', 'batch', batch.id, batch.batch_number,
+        { product_sku, unit_code, qty, location_id: location_id || null },
+        { supplier: supplier || null, length_meters: length_meters || null, weight_kg: weight_kg || null },
+        req
+      );
 
       res.status(201).json({ success: true, data: batch });
     } catch (error) {

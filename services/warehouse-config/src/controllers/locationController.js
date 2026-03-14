@@ -3,6 +3,33 @@ const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
 const cache = require('../services/cache');
 
+// ─── Helper: scrie un eveniment în wms_ops_audit ──────────────────────────────
+async function auditOp(action_type, entity_id, entity_code, changes, extra_info, req) {
+  try {
+    const user = req?.user || {};
+    const user_id = user.id || user.userId || 'system';
+    const user_name = user.username || user.email || user_id;
+    const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || null)?.split(',')[0]?.trim() || null;
+    await db.query(
+      `INSERT INTO wms_ops_audit
+         (action_type, entity_type, entity_id, entity_code, service, changes, extra_info, user_id, user_name, ip_address)
+       VALUES ($1, 'location', $2, $3, 'warehouse-config', $4, $5, $6, $7, $8::inet)`,
+      [
+        action_type,
+        entity_id || null,
+        entity_code || null,
+        changes ? JSON.stringify(changes) : null,
+        extra_info ? JSON.stringify(extra_info) : null,
+        user_id,
+        user_name,
+        ip,
+      ]
+    );
+  } catch (auditErr) {
+    logger.warn('wms_ops_audit insert failed (non-critical):', auditErr.message);
+  }
+}
+
 class LocationController {
   // Get all locations for a zone
   async getAll(req, res, next) {
@@ -132,6 +159,11 @@ class LocationController {
       ]);
 
       logger.info(`Location created: ${data.location_code} by user ${req.user.id}`);
+      await auditOp('CREATE_LOCATION', result.rows[0].id, data.location_code,
+        { zone_id: data.zone_id, status: 'AVAILABLE' },
+        { warehouse_id: data.warehouse_id, zone_id: data.zone_id },
+        req
+      );
       await cache.invalidatePrefix(cache.prefixes.locations);
       res.status(201).json({
         success: true,
@@ -264,6 +296,11 @@ class LocationController {
       }
 
       logger.info(`Location updated: ${id} by user ${req.user.id}`);
+      await auditOp('UPDATE_LOCATION', id, result.rows[0].location_code,
+        { updated_fields: Object.keys(data) },
+        null,
+        req
+      );
       await cache.invalidatePrefix(cache.prefixes.locations);
       res.json({
         success: true,
@@ -307,6 +344,11 @@ class LocationController {
       `, [id]);
 
       logger.info(`Location deleted: ${id} by user ${req.user.id}`);
+      await auditOp('DELETE_LOCATION', id, null,
+        { previous_status: statusCheck.rows[0].status },
+        null,
+        req
+      );
       await cache.invalidatePrefix(cache.prefixes.locations);
       res.json({
         success: true,
@@ -314,6 +356,122 @@ class LocationController {
       });
     } catch (error) {
       logger.error('Delete location error:', error);
+      next(error);
+    }
+  }
+
+  // ─── Faza 2.4: Update capacity constraints for a location ─────────────────
+  // PATCH /api/v1/locations/:id/capacity
+  async updateCapacity(req, res, next) {
+    try {
+      const { id } = req.params;
+      const {
+        max_weight_kg,   // null = fara limita
+        max_volume_m3,
+        min_length_m,
+        max_length_m,
+        allowed_categories, // array sau null
+        allowed_packaging,  // array sau null
+        suggestion_label,
+        restriction_note,   // stocat in constraints.restriction_note
+      } = req.body;
+
+      // Verificam ca locatia exista
+      const locRes = await db.query(
+        'SELECT id, constraints, allowed_categories, allowed_packaging FROM locations WHERE id = $1 AND is_active = true',
+        [id]
+      );
+      if (locRes.rows.length === 0) {
+        return res.status(404).json({ success: false, error: 'Location not found' });
+      }
+
+      const existing = locRes.rows[0];
+      const existingConstraints = existing.constraints || {};
+
+      // Merge constraints JSONB
+      const newConstraints = { ...existingConstraints };
+      if (max_weight_kg !== undefined) {
+        if (max_weight_kg === null || max_weight_kg === '') {
+          delete newConstraints.max_weight_kg;
+        } else {
+          newConstraints.max_weight_kg = parseFloat(max_weight_kg);
+        }
+      }
+      if (max_volume_m3 !== undefined) {
+        if (max_volume_m3 === null || max_volume_m3 === '') {
+          delete newConstraints.max_volume_m3;
+        } else {
+          newConstraints.max_volume_m3 = parseFloat(max_volume_m3);
+        }
+      }
+      if (min_length_m !== undefined) {
+        if (min_length_m === null || min_length_m === '') {
+          delete newConstraints.min_length_m;
+        } else {
+          newConstraints.min_length_m = parseFloat(min_length_m);
+        }
+      }
+      if (max_length_m !== undefined) {
+        if (max_length_m === null || max_length_m === '') {
+          delete newConstraints.max_length_m;
+        } else {
+          newConstraints.max_length_m = parseFloat(max_length_m);
+        }
+      }
+      if (restriction_note !== undefined) {
+        newConstraints.restriction_note = restriction_note || null;
+      }
+
+      // JSONB arrays
+      const newCategories = allowed_categories !== undefined
+        ? (Array.isArray(allowed_categories) && allowed_categories.length > 0 ? allowed_categories : null)
+        : existing.allowed_categories;
+
+      const newPackaging = allowed_packaging !== undefined
+        ? (Array.isArray(allowed_packaging) && allowed_packaging.length > 0 ? allowed_packaging : null)
+        : existing.allowed_packaging;
+
+      const updateFields = [];
+      const values = [];
+      let idx = 1;
+
+      updateFields.push(`constraints = $${idx++}`);
+      values.push(JSON.stringify(newConstraints));
+
+      updateFields.push(`allowed_categories = $${idx++}`);
+      values.push(newCategories ? JSON.stringify(newCategories) : null);
+
+      updateFields.push(`allowed_packaging = $${idx++}`);
+      values.push(newPackaging ? JSON.stringify(newPackaging) : null);
+
+      if (suggestion_label !== undefined) {
+        updateFields.push(`suggestion_label = $${idx++}`);
+        values.push(suggestion_label || null);
+      }
+
+      updateFields.push(`updated_at = CURRENT_TIMESTAMP`);
+      values.push(id);
+
+      const result = await db.query(
+        `UPDATE locations SET ${updateFields.join(', ')} WHERE id = $${idx} RETURNING *`,
+        values
+      );
+
+      logger.info(`Location capacity updated: ${id} by user ${req.user.id}`);
+      await auditOp('PATCH_CAPACITY', id, result.rows[0].location_code,
+        { constraints: newConstraints, allowed_categories: newCategories, allowed_packaging: newPackaging },
+        null,
+        req
+      );
+      await cache.invalidatePrefix(cache.prefixes.locations);
+
+      res.json({
+        success: true,
+        message: 'Location capacity updated successfully',
+        data: result.rows[0],
+      });
+    } catch (error) {
+      logger.error('Update location capacity error:', error);
       next(error);
     }
   }
@@ -338,6 +496,11 @@ class LocationController {
         [coord_x ?? null, coord_y ?? null, coord_z ?? null, path_cost ?? null, id]
       );
 
+      await auditOp('PATCH_COORDINATES', id, result.rows[0].location_code,
+        { coord_x, coord_y, coord_z: coord_z ?? null, path_cost: path_cost ?? null },
+        null,
+        req
+      );
       await cache.invalidatePrefix(cache.prefixes.locations);
       res.json({ success: true, data: result.rows[0] });
     } catch (error) {

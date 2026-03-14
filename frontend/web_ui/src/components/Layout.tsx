@@ -22,7 +22,22 @@ import QrCode2Icon from '@mui/icons-material/QrCode2';
 import MoveToInboxIcon from '@mui/icons-material/MoveToInbox';
 import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
+import MoveDownIcon from '@mui/icons-material/MoveDown';
+import AssignmentIcon from '@mui/icons-material/Assignment';
+import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
+import TrendingUpIcon from '@mui/icons-material/TrendingUp';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import StorageIcon from '@mui/icons-material/Storage';
+import SpeedIcon from '@mui/icons-material/Speed';
+import AutoGraphIcon from '@mui/icons-material/AutoGraph';
+import VerifiedIcon from '@mui/icons-material/Verified';
+import ScienceIcon from '@mui/icons-material/Science';
+import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
+import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
+import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
+import SyncAltIcon from '@mui/icons-material/SyncAlt';
 import { useAuth } from '../hooks/useAuth';
+import NotificationBell from './NotificationBell';
 
 const drawerWidth = 260;
 
@@ -44,10 +59,21 @@ const menuGroups: MenuGroupDef[] = [
     items: [
       { text: 'Setări', icon: <SettingsApplicationsIcon />, path: '/initial-setup', roles: ['admin', 'manager'] },
       { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config', roles: ['admin', 'manager'] },
+      { text: 'Validare Configuratie', icon: <VerifiedIcon />, path: '/validare-configuratie', roles: ['admin', 'manager'] },
+      { text: 'Validator Setup (3.2)', icon: <VerifiedIcon />, path: '/validator-configurare', roles: ['admin', 'manager'] },
+      { text: 'Capacitati Locatii', icon: <StorageIcon />, path: '/capacitati-locatii', roles: ['admin', 'manager'] },
+      { text: 'Wizard Configurare', icon: <SettingsApplicationsIcon />, path: '/wizard-configurare', roles: ['admin', 'manager'] },
+      { text: 'Template-uri Depozit', icon: <WarehouseIcon />, path: '/template-depozit', roles: ['admin', 'manager'] },
+      { text: 'Simulator WMS', icon: <ScienceIcon />, path: '/simulator-wms', roles: ['admin', 'manager'] },
+      { text: 'Reguli Dinamice', icon: <DynamicFeedIcon />, path: '/reguli-dinamice', roles: ['admin', 'manager'] },
+      { text: 'Alerte Live', icon: <NotificationsActiveIcon />, path: '/alerte-live', roles: ['admin', 'manager', 'operator'] },
+      { text: 'ERP Pluriva', icon: <SyncAltIcon />, path: '/erp-integrare', roles: ['admin', 'manager'] },
+      { text: 'Audit Log', icon: <ManageHistoryIcon />, path: '/audit-activitate', roles: ['admin', 'manager'] },
       { text: 'Utilizatori', icon: <PeopleIcon />, path: '/utilizatori', roles: ['admin'] },
       { text: 'Import Stoc Inițial', icon: <FileUploadIcon />, path: '/import-stoc', roles: ['admin', 'manager'] },
       { text: 'QR Coduri Locații', icon: <QrCode2Icon />, path: '/qr-locatii', roles: ['admin', 'manager'] },
-      { text: 'Rapoarte', icon: <AssessmentIcon />, path: '/reports', roles: ['admin', 'manager'] },
+      { text: 'Rapoarte Picking', icon: <AssessmentIcon />, path: '/reports', roles: ['admin', 'manager'] },
+      { text: 'Etichete Loturi', icon: <TrendingUpIcon />, path: '/etichete-loturi', roles: ['admin', 'manager'] },
     ],
   },
   {
@@ -56,11 +82,14 @@ const menuGroups: MenuGroupDef[] = [
     items: [
       { text: 'Comenzi Furnizor', icon: <ShoppingCartIcon />, path: '/comenzi-furnizor', roles: ['admin', 'manager'] },
       { text: 'NIR Recepție', icon: <ReceiptLongIcon />, path: '/receptie-nir', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Putaway Tasks', icon: <MoveDownIcon />, path: '/putaway-tasks', roles: ['admin', 'manager', 'operator'] },
       { text: 'Produse', icon: <InventoryIcon />, path: '/products', roles: ['admin', 'manager', 'operator'] },
       { text: 'Recepție Marfă', icon: <MoveToInboxIcon />, path: '/receptie', roles: ['admin', 'manager', 'operator'] },
       { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders', roles: ['admin', 'manager', 'operator'] },
       { text: 'Picking', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Note de Culegere', icon: <AssignmentIcon />, path: '/note-culegere', roles: ['admin', 'manager', 'operator'] },
       { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Livrare Șofer', icon: <DirectionsCarIcon />, path: '/livrare', roles: ['admin', 'manager', 'operator'] },
       // Opțiuni suplimentare (rămân vizibile, dar grupate)
       { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches', roles: ['admin', 'manager', 'operator'] },
       { text: 'Transformări', icon: <TransformIcon />, path: '/transformations', roles: ['admin', 'manager', 'operator'] },
@@ -68,12 +97,13 @@ const menuGroups: MenuGroupDef[] = [
     ],
   },
   {
-    title: 'Producție',
-    roles: ['admin', 'manager', 'operator'],
+    title: 'Rapoarte & Analiță',
+    roles: ['admin', 'manager'],
     items: [
-      { text: 'Croitorie', icon: <ContentCutIcon />, path: '/cutting', roles: ['admin', 'manager', 'operator'] },
-      { text: 'Cusut', icon: <ChecklistIcon />, path: '/sewing', roles: ['admin', 'manager', 'operator'] },
-      { text: 'Control Calitate', icon: <ChecklistIcon />, path: '/qc', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Mișcări inventar', icon: <SwapHorizIcon />, path: '/rapoarte-miscari', roles: ['admin', 'manager'] },
+      { text: 'Stoc & Loturi', icon: <StorageIcon />, path: '/rapoarte-stoc', roles: ['admin', 'manager'] },
+      { text: 'Performanță', icon: <SpeedIcon />, path: '/rapoarte-performanta', roles: ['admin', 'manager'] },
+      { text: 'Predicții & Forecast', icon: <AutoGraphIcon />, path: '/rapoarte-predictii', roles: ['admin', 'manager'] },
     ],
   },
 ];
@@ -220,6 +250,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
               'Dashboard'
             }
           </Typography>
+          <NotificationBell />
           <IconButton onClick={handleMenuOpen}>
             <Avatar sx={{ bgcolor: '#1976d2' }}>
               {user?.username?.charAt(0).toUpperCase()}

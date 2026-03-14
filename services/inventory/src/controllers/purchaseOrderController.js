@@ -186,6 +186,94 @@ class PurchaseOrderController {
     }
   }
 
+  // POST /api/v1/purchase-orders/import-bulk
+  // Body: { orders: [ { order_number, supplier_name, order_date, delivery_date, currency, notes, lines: [...] } ] }
+  static async importBulk(req, res, next) {
+    const client = await pool.connect();
+    try {
+      const { orders = [], source = 'MANUAL_IMPORT' } = req.body;
+      if (!Array.isArray(orders) || orders.length === 0) {
+        return res.status(400).json({ success: false, message: 'Lista de comenzi este goala' });
+      }
+
+      await client.query('BEGIN');
+      const created = [];
+      const skipped = [];
+
+      for (const po of orders) {
+        if (!po.order_number || !po.supplier_name) {
+          skipped.push({ order_number: po.order_number, reason: 'Nr. comanda sau furnizor lipsa' });
+          continue;
+        }
+        // Skip duplicates
+        const exists = await client.query(
+          'SELECT id FROM supplier_orders WHERE order_number = $1',
+          [po.order_number]
+        );
+        if (exists.rows.length > 0) {
+          skipped.push({ order_number: po.order_number, reason: 'Comanda exista deja' });
+          continue;
+        }
+
+        const orderResult = await client.query(
+          `INSERT INTO supplier_orders
+             (order_number, supplier_name, order_date, delivery_date, currency, notes, status)
+           VALUES ($1,$2,$3,$4,$5,$6,'CONFIRMED')
+           RETURNING *`,
+          [
+            po.order_number, po.supplier_name,
+            po.order_date || new Date(),
+            po.delivery_date || null,
+            po.currency || 'RON',
+            po.notes ? `[${source}] ${po.notes}` : `[${source}]`,
+          ]
+        );
+        const order = orderResult.rows[0];
+        const lines = po.lines || [];
+        let totalValue = 0;
+
+        for (let i = 0; i < lines.length; i++) {
+          const l = lines[i];
+          const qty = parseFloat(l.quantity) || 0;
+          const up = parseFloat(l.unit_price) || 0;
+          const lv = Math.round(qty * up * 100) / 100;
+          totalValue += lv;
+          await client.query(
+            `INSERT INTO supplier_order_lines
+               (order_id, line_number, product_sku, product_name, quantity, unit,
+                list_price, discount_pct, unit_price, line_value, packaging_type)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+            [
+              order.id, l.line_number || (i + 1),
+              l.product_sku || null, l.product_name || 'Produs necunoscut',
+              qty, l.unit || 'Km',
+              parseFloat(l.list_price) || 0, parseFloat(l.discount_pct) || 0,
+              up, lv, l.packaging_type || null,
+            ]
+          );
+        }
+        await client.query(
+          'UPDATE supplier_orders SET total_value = $1 WHERE id = $2',
+          [Math.round(totalValue * 100) / 100, order.id]
+        );
+        created.push({ id: order.id, order_number: order.order_number, supplier_name: order.supplier_name });
+      }
+
+      await client.query('COMMIT');
+      logger.info(`importBulk: ${created.length} created, ${skipped.length} skipped (source: ${source})`);
+      res.status(201).json({
+        success: true,
+        data: { created, skipped, total_created: created.length, total_skipped: skipped.length },
+      });
+    } catch (error) {
+      await client.query('ROLLBACK');
+      logger.error('PO importBulk error:', error);
+      next(error);
+    } finally {
+      client.release();
+    }
+  }
+
   // PATCH /api/v1/purchase-orders/:id/status
   static async updateStatus(req, res, next) {
     try {

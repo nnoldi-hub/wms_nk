@@ -3,13 +3,14 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Button, TextField, Select, MenuItem, FormControl,
-  InputLabel, Stack, Alert, Chip, Divider,
+  InputLabel, Stack, Alert, Chip, Divider, Tooltip,
 } from '@mui/material';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import PrintIcon from '@mui/icons-material/Print';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
 import DeleteIcon from '@mui/icons-material/Delete';
+import WarningAmberIcon from '@mui/icons-material/WarningAmber';
 
 const API = 'http://localhost:3011/api/v1';
 
@@ -32,6 +33,7 @@ interface NIRLine {
   total_fara_tva: number;
   order_line_id?: string;
   product_sku?: string;
+  damaged?: boolean;
 }
 
 interface POData {
@@ -153,6 +155,9 @@ export default function ReceptieNIRPage() {
       prev.filter((_, i) => i !== idx).map((l, i) => ({ ...l, line_number: i + 1 }))
     );
 
+  const toggleDamaged = (idx: number) =>
+    setLines(prev => { const n = [...prev]; n[idx] = { ...n[idx], damaged: !n[idx].damaged }; return n; });
+
   const total = lines.reduce((s, l) => s + (l.total_fara_tva || 0), 0);
 
   const handleSubmit = async () => {
@@ -160,6 +165,18 @@ export default function ReceptieNIRPage() {
     const hdrs = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
     setSaving(true);
     try {
+      // Compute anomalii note
+      const anomalii: string[] = [];
+      lines.forEach(l => {
+        if (l.damaged) anomalii.push(`L${l.line_number}:DETERIORAT`);
+        const r = parseFloat(l.cant_received) || 0;
+        const d = parseFloat(l.cant_doc) || 0;
+        if (d > 0 && r > d) anomalii.push(`L${l.line_number}:SUPRALIVR+${Math.round(((r - d) / d) * 100)}%`);
+        if (d > 0 && r < d) anomalii.push(`L${l.line_number}:LIPSA-${Math.round(((d - r) / d) * 100)}%`);
+      });
+      const notesWithAnomalii = anomalii.length
+        ? `${notes ? notes + ' | ' : ''}ANOMALII: ${anomalii.join('; ')}`
+        : notes;
       const body = {
         nir_number: nirNumber,
         supplier_order_id: poId || undefined,
@@ -170,7 +187,7 @@ export default function ReceptieNIRPage() {
         gestiune: GESTIUNI.find(g => g.code === gestiune)?.name || gestiune,
         gestiune_code: gestiune,
         transport_doc: transportDoc || undefined,
-        notes: notes || undefined,
+        notes: notesWithAnomalii || undefined,
         lines: lines.map((l, i) => ({
           ...l,
           line_number: i + 1,
@@ -183,15 +200,22 @@ export default function ReceptieNIRPage() {
         method: 'POST', headers: hdrs, body: JSON.stringify(body),
       });
       const j = await r.json();
-      if (j.success) {
-        setSaved({
-          nir_number: j.data.nir_number || nirNumber,
-          id: j.data.id,
-          total_fara_tva: j.data.total_fara_tva || total,
-        });
-      } else {
+      if (!j.success) {
         alert(j.message || 'Eroare la salvare NIR');
+        return;
       }
+      // Auto-confirmare NIR: genereaza numarul NK, create batches, actualizeaza PO status
+      const nirId = j.data.id;
+      const confR = await fetch(`${API}/goods-receipts/${nirId}/confirm`, {
+        method: 'POST', headers: hdrs,
+      });
+      const confJ = await confR.json();
+      const finalData = confJ.success ? confJ.data : j.data;
+      setSaved({
+        nir_number: finalData.nir_number || nirNumber,
+        id: finalData.id,
+        total_fara_tva: finalData.total_fara_tva || total,
+      });
     } finally {
       setSaving(false);
     }
@@ -273,6 +297,9 @@ export default function ReceptieNIRPage() {
         <Stack direction="row" spacing={2} justifyContent="center">
           <Button variant="outlined" startIcon={<PrintIcon />} onClick={handlePrint} size="large">
             Printează NIR
+          </Button>
+          <Button variant="contained" color="success" onClick={() => navigate('/putaway-tasks')} size="large">
+            📦 Sarcini Putaway
           </Button>
           <Button variant="contained" onClick={() => navigate('/comenzi-furnizor')} size="large">
             Înapoi la Comenzi
@@ -395,8 +422,11 @@ export default function ReceptieNIRPage() {
                 const cantRec = parseFloat(l.cant_received) || 0;
                 const cantDoc = parseFloat(l.cant_doc) || 0;
                 const isShort = cantDoc > 0 && cantRec < cantDoc;
+                const isOver = cantDoc > 0 && cantRec > cantDoc;
+                const diff = cantRec - cantDoc;
+                const diffPct = cantDoc > 0 ? Math.round((diff / cantDoc) * 100) : 0;
                 return (
-                  <TableRow key={idx} hover sx={{ bgcolor: isShort ? 'warning.50' : undefined }}>
+                  <TableRow key={idx} hover sx={{ bgcolor: l.damaged ? '#fce4ec' : isShort ? 'warning.50' : isOver ? '#fff3e0' : undefined }}>
                     <TableCell sx={{ color: 'text.disabled', width: 32, fontSize: '0.8rem' }}>{idx + 1}</TableCell>
                     <TableCell>
                       <TextField
@@ -459,10 +489,18 @@ export default function ReceptieNIRPage() {
                             textAlign: 'right',
                             fontWeight: 700,
                             fontSize: '0.85rem',
-                            color: isShort ? '#d32f2f' : undefined,
+                            color: isShort ? '#d32f2f' : isOver ? '#f57c00' : undefined,
                           },
                         }}
                       />
+                      {cantDoc > 0 && diff !== 0 && (
+                        <Chip
+                          label={diff > 0 ? `+${diffPct}%` : `${diffPct}%`}
+                          size="small"
+                          color={diff > 0 ? 'warning' : 'error'}
+                          sx={{ mt: 0.3, height: 16, fontSize: '0.6rem', display: 'block' }}
+                        />
+                      )}
                     </TableCell>
                     <TableCell>
                       <TextField
@@ -477,7 +515,12 @@ export default function ReceptieNIRPage() {
                     <TableCell sx={{ fontWeight: 700, whiteSpace: 'nowrap', fontSize: '0.85rem' }}>
                       {(l.total_fara_tva || 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })}
                     </TableCell>
-                    <TableCell>
+                    <TableCell sx={{ whiteSpace: 'nowrap' }}>
+                      <Tooltip title={l.damaged ? 'Anulează marfă deteriorată' : 'Marchează ca deteriorată (→ CARANTINA)'}>
+                        <Button size="small" onClick={() => toggleDamaged(idx)} sx={{ minWidth: 0, p: 0.5 }}>
+                          <WarningAmberIcon sx={{ fontSize: '1rem', color: l.damaged ? 'error.main' : 'action.disabled' }} />
+                        </Button>
+                      </Tooltip>
                       <Button
                         size="small"
                         color="error"
@@ -495,6 +538,19 @@ export default function ReceptieNIRPage() {
           </Table>
         </TableContainer>
 
+        {(() => {
+          const damagedLines = lines.filter(l => l.damaged).map(l => l.line_number);
+          const overLines = lines.filter(l => { const r = parseFloat(l.cant_received)||0; const d = parseFloat(l.cant_doc)||0; return d > 0 && r > d; });
+          const shortLines = lines.filter(l => { const r = parseFloat(l.cant_received)||0; const d = parseFloat(l.cant_doc)||0; return d > 0 && r < d; });
+          if (!damagedLines.length && !overLines.length && !shortLines.length) return null;
+          return (
+            <Alert severity={damagedLines.length ? 'error' : 'warning'} sx={{ mt: 1, mb: 0 }}>
+              {damagedLines.length > 0 && <span>⚠️ <strong>Marfă deteriorată</strong> pe liniile {damagedLines.join(', ')} — va fi marcată CARANTINA la putaway. </span>}
+              {overLines.length > 0 && <span>📈 <strong>Supralivrare</strong> detectată: {overLines.length} linie/linii. </span>}
+              {shortLines.length > 0 && <span>📉 <strong>Lipsă</strong> detectată: {shortLines.length} linie/linii. </span>}
+            </Alert>
+          );
+        })()}
         <Divider sx={{ my: 1.5 }} />
         <Stack direction="row" justifyContent="space-between" alignItems="center">
           <Button size="small" startIcon={<AddCircleOutlineIcon />} onClick={addLine}>

@@ -2,6 +2,33 @@ const db = require('../config/database');
 const logger = require('../config/logger');
 const { v4: uuidv4 } = require('uuid');
 
+// ─── Helper: scrie un eveniment în wms_ops_audit ──────────────────────────────
+async function auditOp(action_type, entity_id, entity_code, changes, extra_info, req) {
+  try {
+    const user = req?.user || {};
+    const user_id   = user.id || user.userId || 'system';
+    const user_name = user.username || user.email || user_id;
+    const ip = (req?.headers?.['x-forwarded-for'] || req?.ip || null)?.split(',')[0]?.trim() || null;
+    await db.query(
+      `INSERT INTO wms_ops_audit
+         (action_type, entity_type, entity_id, entity_code, service, changes, extra_info, user_id, user_name, ip_address)
+       VALUES ($1, 'warehouse_setting', $2, $3, 'warehouse-config', $4, $5, $6, $7, $8::inet)`,
+      [
+        action_type,
+        entity_id   || null,
+        entity_code || null,
+        changes     ? JSON.stringify(changes) : null,
+        extra_info  ? JSON.stringify(extra_info) : null,
+        user_id,
+        user_name,
+        ip,
+      ]
+    );
+  } catch (auditErr) {
+    logger.warn('wms_ops_audit (settings) insert failed (non-critical):', auditErr.message);
+  }
+}
+
 class WarehouseSettingsController {
   // List all settings for a warehouse, optional filter by category
   async list(req, res, next) {
@@ -61,6 +88,13 @@ class WarehouseSettingsController {
         data.is_editable !== false
       ]);
       res.status(201).json({ success: true, message: 'Setting created', data: result.rows[0] });
+      // Audit 6.1
+      const row = result.rows[0];
+      await auditOp('SETTING_CREATE', row.id, `${row.setting_category}/${row.setting_key}`, null, {
+        warehouse_id: row.warehouse_id,
+        setting_value: row.setting_value,
+        setting_type: row.setting_type,
+      }, req);
     } catch (error) {
       logger.error('Create warehouse setting error:', error);
       next(error);
@@ -94,6 +128,10 @@ class WarehouseSettingsController {
       );
       if (!result.rows.length) return res.status(404).json({ error: 'Setting not found' });
       res.json({ success: true, message: 'Setting updated', data: result.rows[0] });
+      // Audit 6.1
+      const row = result.rows[0];
+      await auditOp('SETTING_UPDATE', id, `${row.setting_category}/${row.setting_key}`,
+        data, { warehouse_id: row.warehouse_id }, req);
     } catch (error) {
       logger.error('Update warehouse setting error:', error);
       next(error);
@@ -104,9 +142,17 @@ class WarehouseSettingsController {
   async remove(req, res, next) {
     try {
       const { id } = req.params;
+      // Citim inainte de delete pentru audit
+      const prev = await db.query('SELECT * FROM warehouse_settings WHERE id = $1', [id]);
       const result = await db.query('DELETE FROM warehouse_settings WHERE id = $1 RETURNING id', [id]);
       if (!result.rows.length) return res.status(404).json({ error: 'Setting not found' });
       res.json({ success: true, message: 'Setting deleted' });
+      // Audit 6.1
+      if (prev.rows.length) {
+        const row = prev.rows[0];
+        await auditOp('SETTING_DELETE', id, `${row.setting_category}/${row.setting_key}`,
+          null, { warehouse_id: row.warehouse_id, setting_key: row.setting_key }, req);
+      }
     } catch (error) {
       logger.error('Delete warehouse setting error:', error);
       next(error);

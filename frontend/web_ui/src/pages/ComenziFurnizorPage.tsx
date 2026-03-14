@@ -1,18 +1,107 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box, Typography, Paper, Table, TableBody, TableCell, TableContainer,
   TableHead, TableRow, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, Select, MenuItem, FormControl, InputLabel,
-  Chip, IconButton, Tooltip, Stack, Autocomplete,
+  Chip, IconButton, Tooltip, Stack, Autocomplete, Alert, LinearProgress,
+  Tab, Tabs,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import DeleteIcon from '@mui/icons-material/Delete';
 import ReceiptLongIcon from '@mui/icons-material/ReceiptLong';
 import AddCircleOutlineIcon from '@mui/icons-material/AddCircleOutline';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
+import SyncIcon from '@mui/icons-material/Sync';
+import DownloadIcon from '@mui/icons-material/Download';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import ErrorIcon from '@mui/icons-material/Error';
+
+// ─── CSV helpers ─────────────────────────────────────────────────────────────
+// Expected CSV columns (tab or comma separated):
+// Nr.Comanda, Furnizor, DataComanda, TermenLivrare, NumeProdus, SKU, Cantitate, UM, PretLista, Discount%, PretUnitar, TipAmbalare
+
+function parseCSV(text: string): ImportPO[] {
+  const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim().split('\n');
+  if (lines.length < 2) return [];
+  const sep = lines[0].includes('\t') ? '\t' : ',';
+  const headers = lines[0].split(sep).map(h => h.trim().toLowerCase().replace(/[^a-z0-9]/g, '_'));
+
+  const col = (row: string[], names: string[]): string => {
+    for (const n of names) {
+      const idx = headers.findIndex(h => h.includes(n));
+      if (idx >= 0 && row[idx]) return row[idx].trim().replace(/^"|"$/g, '');
+    }
+    return '';
+  };
+
+  const orderMap: Record<string, ImportPO> = {};
+  for (let i = 1; i < lines.length; i++) {
+    if (!lines[i].trim()) continue;
+    const row = lines[i].split(sep);
+    const nr = col(row, ['nr_comanda', 'nr__comanda', 'comanda', 'order_number', 'numar']);
+    const supplier = col(row, ['furnizor', 'supplier']);
+    if (!nr || !supplier) continue;
+
+    if (!orderMap[nr]) {
+      orderMap[nr] = {
+        order_number: nr,
+        supplier_name: supplier,
+        order_date: col(row, ['data', 'order_date', 'data_comanda']).slice(0, 10) || new Date().toISOString().slice(0, 10),
+        delivery_date: col(row, ['termen', 'delivery_date', 'termen_livrare']).slice(0, 10) || '',
+        currency: col(row, ['valuta', 'currency']) || 'RON',
+        notes: col(row, ['observ', 'notes', 'nota']) || '',
+        lines: [],
+      };
+    }
+    const productName = col(row, ['produs', 'produs_name', 'denumire', 'product_name', 'material']);
+    if (productName) {
+      const lp = parseFloat(col(row, ['pret_lista', 'list_price', 'pret_lista_'])) || 0;
+      const dp = parseFloat(col(row, ['discount', 'disco'])) || 0;
+      const up = parseFloat(col(row, ['pret_unitar', 'unit_price', 'pret_unitar_'])) || (dp ? lp * (1 - dp / 100) : lp);
+      const qty = parseFloat(col(row, ['cantitate', 'quantity', 'cant'])) || 0;
+      orderMap[nr].lines.push({
+        line_number: orderMap[nr].lines.length + 1,
+        product_name: productName,
+        product_sku: col(row, ['sku', 'cod', 'cod_material']) || '',
+        quantity: qty,
+        unit: col(row, ['um', 'unit', 'unitate_masura']) || 'Km',
+        list_price: lp,
+        discount_pct: dp,
+        unit_price: up,
+        line_value: Math.round(qty * up * 100) / 100,
+        packaging_type: col(row, ['ambalare', 'packaging', 'tip_ambalare']) || '',
+      });
+    }
+  }
+  return Object.values(orderMap);
+}
+
+function downloadSampleCSV() {
+  const header = 'Nr.Comanda\tFurnizor\tDataComanda\tTermenLivrare\tDenumire\tSKU\tCantitate\tUM\tPretLista\tDiscount%\tPretUnitar\tTipAmbalare';
+  const row1 = 'CA_100\tBENEXEL SRL\t2026-03-13\t2026-04-15\tCYABY-F 5X2.5 NEGRU\tCBL-001\t5\tKm\t120.5000\t5\t114.4750\tTambur';
+  const row2 = 'CA_100\tBENEXEL SRL\t2026-03-13\t2026-04-15\tCYKY 4X25 ALB\tCBL-002\t3\tKm\t85.0000\t0\t85.0000\tRola';
+  const row3 = 'CA_101\tELECTROCAB SA\t2026-03-13\t2026-05-01\tNYY-J 3X2.5\tCBL-010\t10\tKm\t55.2000\t10\t49.6800\tTambur';
+  const csv = [header, row1, row2, row3].join('\n');
+  const blob = new Blob([csv], { type: 'text/tab-separated-values' });
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = 'comenzi_furnizor_template.tsv'; a.click();
+}
+
+interface ImportLine {
+  line_number: number; product_name: string; product_sku: string;
+  quantity: number; unit: string; list_price: number; discount_pct: number;
+  unit_price: number; line_value: number; packaging_type: string;
+}
+interface ImportPO {
+  order_number: string; supplier_name: string; order_date: string;
+  delivery_date: string; currency: string; notes: string; lines: ImportLine[];
+}
+interface ImportResult { created: { order_number: string }[]; skipped: { order_number: string; reason: string }[] }
 
 const API = 'http://localhost:3011/api/v1';
+const ERP_URL_KEY = 'wms_erp_sync_url';
 
 const STATUS_COLORS: Record<string, 'default' | 'info' | 'warning' | 'success' | 'error'> = {
   DRAFT: 'default',
@@ -94,6 +183,22 @@ export default function ComenziFurnizorPage() {
   const [lines, setLines] = useState<POLine[]>([emptyLine(1)]);
   const [saving, setSaving] = useState(false);
   const [viewLoading, setViewLoading] = useState(false);
+
+  // Import CSV state
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importTab, setImportTab] = useState(0); // 0=CSV, 1=ERP
+  const [csvPreview, setCsvPreview] = useState<ImportPO[]>([]);
+  const [csvError, setCsvError] = useState('');
+  const [importing, setImporting] = useState(false);
+  const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  // ERP sync state
+  const [erpUrl, setErpUrl] = useState(localStorage.getItem(ERP_URL_KEY) || '');
+  const [erpApiKey, setErpApiKey] = useState('');
+  const [erpPreview, setErpPreview] = useState<ImportPO[]>([]);
+  const [erpFetchLoading, setErpFetchLoading] = useState(false);
+  const [erpError, setErpError] = useState('');
 
   const token = localStorage.getItem('accessToken');
 
@@ -195,6 +300,92 @@ export default function ComenziFurnizorPage() {
 
   const totalValue = lines.reduce((s, l) => s + (l.line_value || 0), 0);
 
+  // ─── CSV Import handlers ───────────────────────────────────────────────────
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      const text = ev.target?.result as string;
+      try {
+        const parsed = parseCSV(text);
+        if (parsed.length === 0) {
+          setCsvError('Nu s-au detectat comenzi valide. Verifică formatul fișierului.');
+        } else {
+          setCsvPreview(parsed);
+          setCsvError('');
+        }
+      } catch {
+        setCsvError('Eroare la parsarea fișierului.');
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+    e.target.value = ''; // reset so same file can be re-uploaded
+  };
+
+  const handleImportBulk = async (pos: ImportPO[], source: string) => {
+    setImporting(true);
+    setImportResult(null);
+    try {
+      const hdrs = { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' };
+      const r = await fetch(`${API}/purchase-orders/import-bulk`, {
+        method: 'POST', headers: hdrs,
+        body: JSON.stringify({ orders: pos, source }),
+      });
+      const j = await r.json() as { success: boolean; data?: ImportResult; message?: string };
+      if (j.success && j.data) {
+        setImportResult(j.data);
+        loadOrders();
+      } else {
+        setCsvError(j.message || 'Eroare la import');
+      }
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  // ─── ERP Sync handlers ────────────────────────────────────────────────────
+  const handleErpFetch = async () => {
+    if (!erpUrl) return;
+    setErpFetchLoading(true);
+    setErpError('');
+    setErpPreview([]);
+    try {
+      localStorage.setItem(ERP_URL_KEY, erpUrl);
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (erpApiKey) headers['X-Api-Key'] = erpApiKey;
+      const r = await fetch(erpUrl, { headers });
+      if (!r.ok) throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+      const j = await r.json() as unknown;
+      // Accept both: array of POs or { orders: [...] } or { data: [...] }
+      let pos: ImportPO[] = [];
+      if (Array.isArray(j)) pos = j as ImportPO[];
+      else if (j && typeof j === 'object') {
+        const obj = j as Record<string, unknown>;
+        const list = (obj.orders || obj.data || obj.items || []) as ImportPO[];
+        pos = list;
+      }
+      if (pos.length === 0) {
+        setErpError('ERP-ul a răspuns, dar fără comenzi (lista goală). Verifică URL-ul sau formatul răspunsului.');
+      } else {
+        setErpPreview(pos);
+      }
+    } catch (e: unknown) {
+      setErpError(`Nu s-a putut conecta la ERP: ${(e as Error).message}. Verifică URL-ul, CORS și că ERP-ul este accesibil.`);
+    } finally {
+      setErpFetchLoading(false);
+    }
+  };
+
+  const closeImport = () => {
+    setImportOpen(false);
+    setCsvPreview([]);
+    setCsvError('');
+    setImportResult(null);
+    setErpPreview([]);
+    setErpError('');
+  };
+
   return (
     <Box sx={{ p: 3 }}>
       {/* Header */}
@@ -205,10 +396,23 @@ export default function ComenziFurnizorPage() {
             Gestionare comenzi de achiziție — format CA_XXXX / DD/MM/YYYY
           </Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} size="large">
-          Comandă Nouă
-        </Button>
+        <Stack direction="row" spacing={1}>
+          <Button variant="outlined" startIcon={<SyncIcon />}
+            onClick={() => { setImportTab(1); setImportOpen(true); }}>
+            Import ERP
+          </Button>
+          <Button variant="outlined" startIcon={<UploadFileIcon />}
+            onClick={() => { setImportTab(0); setImportOpen(true); }}>
+            Import CSV
+          </Button>
+          <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} size="large">
+            Comandă Nouă
+          </Button>
+        </Stack>
       </Stack>
+
+      {/* hidden file input */}
+      <input ref={fileInputRef} type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} onChange={handleFileChange} />
 
       {/* Filter bar */}
       <Stack direction="row" spacing={2} mb={2}>
@@ -522,6 +726,214 @@ export default function ComenziFurnizorPage() {
           </DialogActions>
         </Dialog>
       )}
+      {/* ─── Dialog Import CSV / ERP ─── */}
+      <Dialog open={importOpen} onClose={closeImport} maxWidth="md" fullWidth>
+        <DialogTitle>
+          <Stack direction="row" spacing={1} alignItems="center">
+            <UploadFileIcon color="primary" />
+            <span>Import Comenzi Furnizor</span>
+          </Stack>
+        </DialogTitle>
+        <DialogContent dividers sx={{ minHeight: 340 }}>
+          <Tabs value={importTab} onChange={(_, v: number) => setImportTab(v)} sx={{ mb: 2 }}>
+            <Tab label="📂 Import CSV / TSV" />
+            <Tab label="🔗 Sincronizare ERP" />
+          </Tabs>
+
+          {/* ── Tab 0: CSV Import ── */}
+          {importTab === 0 && (
+            <Box>
+              {!importResult ? (
+                <>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Fișierul trebuie să conțină coloanele: <strong>Nr.Comanda, Furnizor, DataComanda, TermenLivrare, Denumire, SKU, Cantitate, UM, PretLista, Discount%, PretUnitar, TipAmbalare</strong>.
+                    Separatorul poate fi virgulă sau tab. O linie per produs (mai multe linii cu același Nr.Comanda = o singură comandă).
+                  </Alert>
+                  <Stack direction="row" spacing={2} mb={2}>
+                    <Button variant="contained" startIcon={<UploadFileIcon />}
+                      onClick={() => fileInputRef.current?.click()}>
+                      Alege Fișier CSV / TSV
+                    </Button>
+                    <Button variant="outlined" startIcon={<DownloadIcon />} onClick={downloadSampleCSV}>
+                      Descarcă Template
+                    </Button>
+                  </Stack>
+                  {csvError && <Alert severity="error" sx={{ mb: 2 }}>{csvError}</Alert>}
+                  {csvPreview.length > 0 && (
+                    <>
+                      <Alert severity="success" sx={{ mb: 1 }}>
+                        S-au detectat <strong>{csvPreview.length} comenzi</strong> cu total{' '}
+                        <strong>{csvPreview.reduce((s, p) => s + p.lines.length, 0)} linii produse</strong>.
+                        Began duplicatele sunt sărite automat.
+                      </Alert>
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 220, mb: 2 }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              {['Nr. Comandă', 'Furnizor', 'Data', 'Termen', 'Linii', 'Total'].map(h => (
+                                <TableCell key={h} sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>{h}</TableCell>
+                              ))}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {csvPreview.map(po => {
+                              const total = po.lines.reduce((s, l) => s + l.line_value, 0);
+                              return (
+                                <TableRow key={po.order_number} hover>
+                                  <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{po.order_number}</TableCell>
+                                  <TableCell>{po.supplier_name}</TableCell>
+                                  <TableCell>{po.order_date}</TableCell>
+                                  <TableCell>{po.delivery_date || '—'}</TableCell>
+                                  <TableCell align="center">{po.lines.length}</TableCell>
+                                  <TableCell>{total.toLocaleString('ro-RO', { minimumFractionDigits: 2 })} {po.currency || 'RON'}</TableCell>
+                                </TableRow>
+                              );
+                            })}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
+                  )}
+                </>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 3 }}>
+                  <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 1 }} />
+                  <Typography variant="h6" color="success.main">Import finalizat!</Typography>
+                  <Typography variant="body2" mt={1}>
+                    ✅ <strong>{importResult.created.length}</strong> comenzi importate cu succes.
+                  </Typography>
+                  {importResult.skipped.length > 0 && (
+                    <Box mt={1}>
+                      <Typography variant="body2" color="warning.main">
+                        ⚠️ <strong>{importResult.skipped.length}</strong> comenzi sărite:
+                      </Typography>
+                      {importResult.skipped.map(s => (
+                        <Typography key={s.order_number} variant="caption" display="block" color="text.secondary">
+                          {s.order_number}: {s.reason}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              )}
+              {importing && <LinearProgress sx={{ mt: 1 }} />}
+            </Box>
+          )}
+
+          {/* ── Tab 1: ERP Sync ── */}
+          {importTab === 1 && (
+            <Box>
+              {!importResult ? (
+                <>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    ERP-ul trebuie să expună un endpoint REST care returnează o listă de comenzi în format JSON compatibil WMS (<code>{'[{order_number, supplier_name, order_date, lines:[...]}]'}</code>).
+                  </Alert>
+                  <Stack spacing={2} mb={2}>
+                    <TextField
+                      label="URL Endpoint ERP (GET)"
+                      placeholder="http://erp.companie.ro/api/purchase-orders"
+                      value={erpUrl}
+                      onChange={e => setErpUrl(e.target.value)}
+                      fullWidth
+                      helperText="URL-ul este reținut în sesiunea browser-ului."
+                    />
+                    <TextField
+                      label="API Key (opțional)"
+                      placeholder="Bearer token sau API key"
+                      value={erpApiKey}
+                      onChange={e => setErpApiKey(e.target.value)}
+                      type="password"
+                      fullWidth
+                      helperText="Se trimite în header X-Api-Key"
+                    />
+                    <Button
+                      variant="outlined"
+                      startIcon={erpFetchLoading ? undefined : <SyncIcon />}
+                      onClick={() => void handleErpFetch()}
+                      disabled={!erpUrl || erpFetchLoading}
+                    >
+                      {erpFetchLoading ? 'Se conectează la ERP...' : 'Preia Comenzi din ERP'}
+                    </Button>
+                    {erpFetchLoading && <LinearProgress />}
+                  </Stack>
+                  {erpError && (
+                    <Alert severity="error" icon={<ErrorIcon />} sx={{ mb: 2 }}>
+                      {erpError}
+                    </Alert>
+                  )}
+                  {erpPreview.length > 0 && (
+                    <>
+                      <Alert severity="success" sx={{ mb: 1 }}>
+                        ERP-ul a returnat <strong>{erpPreview.length} comenzi</strong>. Verifică lista și confirmă importul.
+                      </Alert>
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 200, mb: 2 }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              {['Nr. Comandă', 'Furnizor', 'Data', 'Linii'].map(h => (
+                                <TableCell key={h} sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>{h}</TableCell>
+                              ))}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {erpPreview.map(po => (
+                              <TableRow key={po.order_number} hover>
+                                <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{po.order_number}</TableCell>
+                                <TableCell>{po.supplier_name}</TableCell>
+                                <TableCell>{po.order_date?.slice(0, 10)}</TableCell>
+                                <TableCell align="center">{po.lines.length}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                    </>
+                  )}
+                </>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 3 }}>
+                  <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 1 }} />
+                  <Typography variant="h6" color="success.main">Sincronizare ERP finalizată!</Typography>
+                  <Typography variant="body2" mt={1}>
+                    ✅ <strong>{importResult.created.length}</strong> comenzi importate din ERP.
+                  </Typography>
+                  {importResult.skipped.length > 0 && (
+                    <Typography variant="body2" color="warning.main" mt={1}>
+                      ⚠️ <strong>{importResult.skipped.length}</strong> comenzi existau deja — sărite.
+                    </Typography>
+                  )}
+                </Box>
+              )}
+              {importing && <LinearProgress sx={{ mt: 1 }} />}
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={closeImport}>{importResult ? 'Închide' : 'Anulează'}</Button>
+          {!importResult && importTab === 0 && csvPreview.length > 0 && (
+            <Button
+              variant="contained"
+              onClick={() => void handleImportBulk(csvPreview, 'CSV_IMPORT')}
+              disabled={importing}
+              startIcon={<UploadFileIcon />}
+            >
+              {importing ? 'Se importă...' : `Importă ${csvPreview.length} comenzi`}
+            </Button>
+          )}
+          {!importResult && importTab === 1 && erpPreview.length > 0 && (
+            <Button
+              variant="contained"
+              color="success"
+              onClick={() => void handleImportBulk(erpPreview, 'ERP_SYNC')}
+              disabled={importing}
+              startIcon={<SyncIcon />}
+            >
+              {importing ? 'Se importă...' : `Importă ${erpPreview.length} comenzi din ERP`}
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
     </Box>
   );
 }

@@ -249,3 +249,118 @@ exports.deleteUser = async (req, res) => {
     res.status(500).json({ error: 'Internal server error' });
   }
 };
+
+// ── Permisiuni granulare ────────────────────────────────────────────────────
+
+const ALLOWED_RESOURCES = [
+  'orders', 'batches', 'picking', 'reception', 'cutting',
+  'sewing', 'qc', 'reports', 'config', 'users',
+];
+
+// GET /api/v1/users/:id/permissions — returneaza permisiunile granulare ale unui user
+exports.getPermissions = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (req.user.role !== 'admin' && req.user.userId !== id) {
+      return res.status(403).json({ error: 'Forbidden' });
+    }
+
+    const result = await req.db.query(
+      `SELECT resource, can_view, can_create, can_edit, can_delete, can_approve
+       FROM user_operation_permissions
+       WHERE user_id = $1
+       ORDER BY resource`,
+      [id]
+    );
+
+    // Returneza un obiect indexat pe resource pentru consum facil in UI
+    const permissions = {};
+    for (const row of result.rows) {
+      permissions[row.resource] = {
+        can_view:    row.can_view,
+        can_create:  row.can_create,
+        can_edit:    row.can_edit,
+        can_delete:  row.can_delete,
+        can_approve: row.can_approve,
+      };
+    }
+
+    res.json({ success: true, data: permissions });
+  } catch (error) {
+    req.logger.error('Get permissions error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+// PUT /api/v1/users/:id/permissions — upsert permisiuni granulare (admin only)
+exports.updatePermissions = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const permissions = req.body; // { orders: { can_view, can_create, ... }, ... }
+
+    if (!permissions || typeof permissions !== 'object') {
+      return res.status(400).json({ error: 'Body must be an object of resource permissions' });
+    }
+
+    const entries = Object.entries(permissions);
+    if (entries.length === 0) {
+      return res.status(400).json({ error: 'At least one resource permission required' });
+    }
+
+    // Valideaza resource names
+    const invalid = entries.map(([r]) => r).filter(r => !ALLOWED_RESOURCES.includes(r));
+    if (invalid.length > 0) {
+      return res.status(400).json({ error: `Resurse necunoscute: ${invalid.join(', ')}` });
+    }
+
+    // Verificare user exista
+    const userCheck = await req.db.query('SELECT id FROM users WHERE id = $1', [id]);
+    if (userCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    // Upsert fiecare resource
+    const savedPermissions = {};
+    for (const [resource, perms] of entries) {
+      const { can_view = true, can_create = false, can_edit = false,
+              can_delete = false, can_approve = false } = perms;
+
+      const result = await req.db.query(
+        `INSERT INTO user_operation_permissions
+           (user_id, resource, can_view, can_create, can_edit, can_delete, can_approve)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         ON CONFLICT (user_id, resource) DO UPDATE SET
+           can_view    = EXCLUDED.can_view,
+           can_create  = EXCLUDED.can_create,
+           can_edit    = EXCLUDED.can_edit,
+           can_delete  = EXCLUDED.can_delete,
+           can_approve = EXCLUDED.can_approve,
+           updated_at  = NOW()
+         RETURNING resource, can_view, can_create, can_edit, can_delete, can_approve`,
+        [id, resource, can_view, can_create, can_edit, can_delete, can_approve]
+      );
+
+      const row = result.rows[0];
+      savedPermissions[row.resource] = {
+        can_view:    row.can_view,
+        can_create:  row.can_create,
+        can_edit:    row.can_edit,
+        can_delete:  row.can_delete,
+        can_approve: row.can_approve,
+      };
+    }
+
+    // Audit
+    await req.db.query(
+      `INSERT INTO audit_logs (entity_type, entity_id, action, user_id, metadata)
+       VALUES ('user', $1, 'update_permissions', $2, $3)`,
+      [id, req.user.userId, JSON.stringify(savedPermissions)]
+    );
+
+    res.json({ success: true, data: savedPermissions });
+  } catch (error) {
+    req.logger.error('Update permissions error', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+};

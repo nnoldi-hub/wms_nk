@@ -9,7 +9,7 @@ const wcClient = axios.create({
 });
 
 wcClient.interceptors.request.use((config) => {
-  const token = localStorage.getItem(WC_TOKEN_KEY);
+  const token = localStorage.getItem(WC_TOKEN_KEY) || localStorage.getItem('accessToken');
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
@@ -80,6 +80,19 @@ export const warehouseConfigService = {
   },
   async patchLocationCoordinates(locationId: string, coords: { coord_x: number | null; coord_y: number | null; coord_z?: number; path_cost?: number }) {
     const { data } = await wcClient.patch(`/api/v1/locations/${locationId}/coordinates`, coords);
+    return data;
+  },
+  async updateLocationCapacity(locationId: string, payload: {
+    max_weight_kg?: number | null;
+    max_volume_m3?: number | null;
+    min_length_m?: number | null;
+    max_length_m?: number | null;
+    allowed_categories?: string[] | null;
+    allowed_packaging?: string[] | null;
+    suggestion_label?: string | null;
+    restriction_note?: string | null;
+  }) {
+    const { data } = await wcClient.patch(`/api/v1/locations/${locationId}/capacity`, payload);
     return data;
   },
   // --- Mutations for quick setup ---
@@ -233,6 +246,66 @@ export const warehouseConfigService = {
     const { data } = await wcClient.get('/api/v1/rules/audit-log/stats', { params });
     return data;
   },
+
+    // --- Validare configurare (Faza 2.3) ---
+  async validateConfig(params?: { warehouse_id?: string }) {
+    const { data } = await wcClient.get('/api/v1/rules/validate', { params });
+    return data;
+  },
+  async validateConfigSummary(params?: { warehouse_id?: string }) {
+    const { data } = await wcClient.get('/api/v1/rules/validate/summary', { params });
+    return data;
+  },
+  // --- Validator Setup Wizard (Faza 3.2) ---
+  async validateSetupCheck(params?: { warehouse_id?: string }) {
+    const { data } = await wcClient.get('/api/v1/validate/setup-check', { params });
+    return data;
+  },
+
+  // --- Reguli Dinamice (Faza 4.1) ---
+  async getDynamicAlerts(params?: {
+    warehouse_id?: string;
+    zone_full_threshold?: number;
+    reel_low_threshold?: number;
+    rotation_days?: number;
+    high_rotation_picks?: number;
+    expiry_warning_days?: number;
+  }) {
+    const { data } = await wcClient.get('/api/v1/rules/dynamic/alerts', { params });
+    return data;
+  },
+
+  // --- Audit Log (Faza 6.1) ---
+  async getAuditLog(params?: Record<string, string | number>) {
+    const { data } = await wcClient.get('/api/v1/rules/audit-log', { params });
+    return data;
+  },
+  async getAuditStats(params?: { from?: string; to?: string }) {
+    const { data } = await wcClient.get('/api/v1/rules/audit-log/stats', { params });
+    return data;
+  },
+
+  // --- Ops Audit (wms_ops_audit — locații, loturi, picking) ---
+  async getOpsAudit(params?: Record<string, string | number>) {
+    const { data } = await wcClient.get('/api/v1/audit/events', { params });
+    return data;
+  },
+  async getOpsAuditStats(params?: { from?: string; to?: string }) {
+    const { data } = await wcClient.get('/api/v1/audit/events/stats', { params });
+    return data;
+  },
+  // --- UI Activity Log (Faza 6.3) ---
+  async postUiEvent(payload: {
+    action_type: string;
+    entity_type?: string;
+    entity_id?: string;
+    entity_code?: string;
+    extra_info?: Record<string, unknown>;
+  }) {
+    const { data } = await wcClient.post('/api/v1/audit/ui-event', payload);
+    return data;
+  },
 };
 
 export default warehouseConfigService;
+

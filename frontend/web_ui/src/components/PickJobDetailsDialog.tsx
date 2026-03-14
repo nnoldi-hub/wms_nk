@@ -4,8 +4,10 @@ import RefreshIcon from '@mui/icons-material/Refresh';
 import AddIcon from '@mui/icons-material/Add';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import GppMaybeIcon from '@mui/icons-material/GppMaybe';
+import ContentCutIcon from '@mui/icons-material/ContentCut';
 import { pickingService, type PickJob, type PickJobItem } from '../services/picking.service';
 import { AuthContext } from '../contexts/AuthContextShared';
+import { CutItemDialog } from './CutItemDialog';
 
 interface Props {
   open: boolean;
@@ -21,6 +23,10 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
   const [busy, setBusy] = useState(false);
   const auth = useContext(AuthContext);
   const currentUser = auth?.user?.username || auth?.user?.email || String(auth?.user?.id || '');
+
+  // Stare dialog tăiere
+  const [cutDialogOpen, setCutDialogOpen] = useState(false);
+  const [cutItem, setCutItem] = useState<PickJobItem | null>(null);
 
   const load = useCallback(async () => {
     if (!open || !jobId) return;
@@ -138,6 +144,18 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
                       </IconButton>
                     </span>
                   </Tooltip>
+                  <Tooltip title="Taiere — înregistrează tăierea și creează restul în stoc">
+                    <span>
+                      <IconButton
+                        size="small"
+                        color="warning"
+                        onClick={() => { setCutItem(it); setCutDialogOpen(true); }}
+                        disabled={busy || it.status === 'DONE'}
+                      >
+                        <ContentCutIcon />
+                      </IconButton>
+                    </span>
+                  </Tooltip>
                   </Stack>
                 </TableCell>
               </TableRow>
@@ -153,6 +171,17 @@ export const PickJobDetailsDialog = ({ open, jobId, onClose, onChanged }: Props)
         <Button onClick={() => handleComplete(true)} startIcon={<GppMaybeIcon />} disabled={busy}>Finalizează (force)</Button>
         <Button onClick={onClose} variant="contained">Închide</Button>
       </DialogActions>
+
+      {/* Dialog tăiere */}
+      {jobId && (
+        <CutItemDialog
+          open={cutDialogOpen}
+          jobId={jobId}
+          item={cutItem}
+          onClose={() => setCutDialogOpen(false)}
+          onDone={() => { setCutDialogOpen(false); void load(); onChanged?.(); }}
+        />
+      )}
     </Dialog>
   );
 };

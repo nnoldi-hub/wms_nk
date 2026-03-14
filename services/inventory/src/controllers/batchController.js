@@ -2,6 +2,8 @@ const { pool } = require('../config/database');
 const logger = require('../utils/logger');
 const { AppError } = require('../middleware/errorHandler');
 const BatchSelectionService = require('../services/batchSelectionService');
+const PDFDocument = require('pdfkit');
+const QRCode = require('qrcode');
 
 class BatchController {
   // Get all batches with filters
@@ -282,6 +284,158 @@ class BatchController {
       res.json(result);
     } catch (error) {
       logger.error('Error selecting batch:', error);
+      next(error);
+    }
+  }
+
+  // GET /api/v1/batches/by-number/:batchNumber  — cautare batch dupa batch_number (pentru scan QR)
+  static async getByBatchNumber(req, res, next) {
+    try {
+      const { batchNumber } = req.params;
+      const result = await pool.query(
+        `SELECT b.*, u.code as unit_code, u.name as unit_name,
+                p.name as product_name,
+                gr.nir_number, gr.supplier_name, gr.receipt_date,
+                l.location_code, l.zone, l.rack, l.position
+         FROM product_batches b
+         LEFT JOIN product_units u  ON u.id = b.unit_id
+         LEFT JOIN products p       ON p.sku = b.product_sku
+         LEFT JOIN goods_receipt_lines grl ON grl.batch_id = b.id
+         LEFT JOIN goods_receipts gr       ON gr.id = grl.receipt_id
+         LEFT JOIN locations l             ON l.id = b.location_id
+         WHERE b.batch_number = $1
+         LIMIT 1`,
+        [batchNumber]
+      );
+      if (result.rows.length === 0) {
+        return res.status(404).json({ success: false, message: 'Batch negasit: ' + batchNumber });
+      }
+      res.json({ success: true, data: result.rows[0] });
+    } catch (error) {
+      logger.error('Error fetching batch by number:', error);
+      next(error);
+    }
+  }
+
+  // GET /api/v1/batches/pending-putaway
+  // Returneaza batches create din NIR-uri confirmate care nu au inca o locatie asignata
+  static async getPendingPutaway(req, res, next) {
+    try {
+      const { limit = 100 } = req.query;
+      const result = await pool.query(
+        `SELECT
+           b.id,
+           b.batch_number,
+           b.product_sku,
+           b.current_quantity,
+           b.length_meters,
+           b.status,
+           b.notes,
+           b.created_at,
+           p.name  AS product_name,
+           gr.nir_number,
+           gr.supplier_name,
+           gr.receipt_date,
+           gr.id   AS goods_receipt_id,
+           grl.unit,
+           grl.cant_received
+         FROM product_batches b
+         JOIN products p                  ON p.sku = b.product_sku
+         JOIN goods_receipt_lines grl     ON grl.batch_id = b.id
+         JOIN goods_receipts gr           ON gr.id = grl.receipt_id
+         WHERE b.location_id IS NULL
+           AND b.status = 'INTACT'
+           AND gr.status = 'CONFIRMED'
+         ORDER BY b.created_at DESC
+         LIMIT $1`,
+        [parseInt(limit)]
+      );
+      res.json({ success: true, data: result.rows });
+    } catch (error) {
+      logger.error('Error fetching pending putaway batches:', error);
+      next(error);
+    }
+  }
+
+  // GET /api/v1/batches/:id/label.pdf
+  // Generates a single A6-sized label PDF for a batch (SKU, lot, qty, weight, QR)
+  static async batchLabelPdf(req, res, next) {
+    try {
+      const { id } = req.params;
+      const result = await pool.query(`
+        SELECT b.*, p.name AS product_name, l.zone, l.rack, l.position
+        FROM product_batches b
+        LEFT JOIN products p ON p.sku = b.product_sku
+        LEFT JOIN locations l ON l.id = b.location_id
+        WHERE b.id = $1
+      `, [id]);
+
+      if (result.rows.length === 0) throw new AppError('Batch not found', 404);
+      const b = result.rows[0];
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename=batch_${b.batch_number}_label.pdf`);
+
+      // A6 landscape: 420 x 297 pt
+      const doc = new PDFDocument({ size: [420, 297], margin: 16 });
+      doc.pipe(res);
+
+      const qrPayload = JSON.stringify({
+        t: 'BATCH',
+        id: b.id,
+        batch: b.batch_number,
+        sku: b.product_sku,
+        qty: b.current_quantity,
+      });
+
+      // QR code top-right
+      try {
+        const qrPng = await QRCode.toBuffer(qrPayload, { type: 'png', margin: 0, width: 100, errorCorrectionLevel: 'M' });
+        doc.image(qrPng, 420 - 16 - 100, 16, { width: 100, height: 100 });
+      } catch (_) { /* skip QR if fails */ }
+
+      const textW = 420 - 16 - 100 - 16 - 12; // width for text column
+
+      // Batch number (large)
+      doc.fontSize(20).font('Helvetica-Bold')
+        .text(b.batch_number, 16, 16, { width: textW });
+
+      // SKU + product name
+      doc.fontSize(11).font('Helvetica-Bold')
+        .text(b.product_sku, 16, 46, { width: textW });
+      if (b.product_name) {
+        doc.fontSize(9).font('Helvetica')
+          .text(b.product_name, 16, 60, { width: textW });
+      }
+
+      let ty = 78;
+      const row = (label, value) => {
+        if (value === null || value === undefined || value === '') return;
+        doc.fontSize(9).font('Helvetica-Bold').text(`${label}:`, 16, ty, { width: 90, continued: false });
+        doc.fontSize(9).font('Helvetica').text(String(value), 106, ty, { width: textW - 90 });
+        ty += 14;
+      };
+
+      const qty = Number(b.current_quantity);
+      const uom = b.unit_code || b.unit_name || 'm';
+      row('Cantitate', `${qty.toFixed(2)} ${uom}`);
+      if (b.weight_kg) row('Greutate', `${Number(b.weight_kg).toFixed(2)} kg`);
+      if (b.length_meters) row('Lungime', `${Number(b.length_meters).toFixed(2)} m`);
+      if (b.lot_number) row('Lot', b.lot_number);
+      row('Status', b.status);
+      if (b.zone) row('Locație', [b.zone, b.rack, b.position].filter(Boolean).join(' / '));
+
+      // Footer
+      const createdDate = b.created_at ? new Date(b.created_at).toLocaleDateString('ro-RO') : '';
+      doc.fontSize(8).font('Helvetica').fillColor('#888')
+        .text(`WMS NK  •  ${createdDate}`, 16, 297 - 22, { width: 380 });
+
+      // Border
+      doc.rect(4, 4, 420 - 8, 297 - 8).lineWidth(1.5).stroke('#333');
+
+      doc.end();
+    } catch (error) {
+      logger.error('Error generating batch label PDF:', error);
       next(error);
     }
   }

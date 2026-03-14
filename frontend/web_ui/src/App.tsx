@@ -25,6 +25,24 @@ import QRLocationsPage from './pages/QRLocationsPage';
 import ReceptieMarfaPage from './pages/ReceptieMarfaPage';
 import ComenziFurnizorPage from './pages/ComenziFurnizorPage';
 import ReceptieNIRPage from './pages/ReceptieNIRPage';
+import PutawayTasksPage from './pages/PutawayTasksPage';
+import PickNotesPage from './pages/PickNotesPage';
+import LivrarePage from './pages/LivrarePage';
+import BatchLabelsPage from './pages/BatchLabelsPage';
+import InventoryMovementsPage from './pages/InventoryMovementsPage';
+import StockReportsPage from './pages/StockReportsPage';
+import PerformancePage from './pages/PerformancePage';
+import PredictionsPage from './pages/PredictionsPage';
+import RulesValidationPage from './pages/RulesValidationPage';
+import ConfigValidatorPage from './pages/ConfigValidatorPage';
+import LocationCapacitiesPage from './pages/LocationCapacitiesPage';
+import WarehouseSetupWizardPage from './pages/WarehouseSetupWizardPage';
+import WarehouseTemplatesPage from './pages/WarehouseTemplatesPage';
+import SimulatorPage from './pages/SimulatorPage';
+import DynamicRulesPage from './pages/DynamicRulesPage';
+import ActivityLogPage from './pages/ActivityLogPage';
+import StockAlertsPage from './pages/StockAlertsPage';
+import ERPIntegrationPage from './pages/ERPIntegrationPage';
 import theme from './theme';
 
 function App() {
@@ -231,6 +249,186 @@ function App() {
                 <ProtectedRoute roles={['admin','manager','operator']}>
                   <Layout>
                     <ReceptieNIRPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/putaway-tasks"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <PutawayTasksPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/note-culegere"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <PickNotesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/livrare"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <LivrarePage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/etichete-loturi"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <BatchLabelsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rapoarte-miscari"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <InventoryMovementsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rapoarte-stoc"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <StockReportsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rapoarte-performanta"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <PerformancePage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/rapoarte-predictii"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <PredictionsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/validare-configuratie"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <RulesValidationPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/validator-configurare"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <ConfigValidatorPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/capacitati-locatii"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <LocationCapacitiesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/wizard-configurare"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <WarehouseSetupWizardPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/template-depozit"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <WarehouseTemplatesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/simulator-wms"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <SimulatorPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reguli-dinamice"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <DynamicRulesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/audit-activitate"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <ActivityLogPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alerte-live"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <StockAlertsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/erp-integrare"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <ERPIntegrationPage />
                   </Layout>
                 </ProtectedRoute>
               }
