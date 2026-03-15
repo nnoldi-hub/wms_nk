@@ -89,6 +89,8 @@ WMS-NKS este un sistem de management al depozitului construit complet pe microse
 
 ## Arhitectură
 
+> Documentație completă: **[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)**
+
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                        BROWSER / MOBILE                         │
@@ -121,18 +123,15 @@ WMS-NKS este un sistem de management al depozitului construit complet pe microse
 | Serviciu | Port | Responsabilitate |
 |---|---|---|
 | `auth` | 3010 | Autentificare JWT, utilizatori, permisiuni |
-| `inventory-service` | 3011 | Stoc, loturi, locații, receptie, picking |
-| `warehouse-config` | 3020 | Configurare depozit, reguli, audit ops, validare |
+| `inventory` | 3011 | Stoc, loturi, locații, receptie, picking |
 | `scanner-service` | 3012 | Scanare coduri de bare / QR |
 | `cutting-service` | 3013 | Ordine tăiere cabluri |
-| `sewing-service` | 3014 | Ordine de productie sewing |
+| `sewing-service` | 3014 | Ordine de producție sewing |
 | `quality-control-service` | 3015 | Inspecții QC |
 | `shipments-service` | 3016 | Expedieri și livrări |
-| `shipping-service` | 3017 | Documente și rute livrare |
-| `reports-service` | 3018 | Rapoarte și analiză |
-| `erp-connector` | 3019 | Integrare ERP Pluriva |
-| `notifications-service` | 3021 | WebSocket, alerte real-time |
-| `scheduler-service` | 3022 | Joburi periodice (cron) |
+| `notifications-service` | 3017 | WebSocket, alerte real-time |
+| `erp-connector` | 3018 | Integrare ERP Pluriva |
+| `warehouse-config` | 3020 | Configurare depozit, reguli, audit ops |
 
 ---
 

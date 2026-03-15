@@ -37,6 +37,11 @@ build/
 *.tmp
 *.temp
 token.txt
+tmp_*.pdf
+
+# Vite cache (all locations)
+.vite/
+**/.vite/
 
 # Backup files
 *.bak
@@ -50,3 +55,8 @@ token.txt
 data/
 postgres-data/
 redis-data/
+
+# Sensitive data & business documents (never commit)
+.env
+MODELE/
+STOC PRODUSE/

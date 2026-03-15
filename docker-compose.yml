@@ -517,42 +517,6 @@ services:
       timeout: 10s
       retries: 3
 
-  # Shipping Service
-  shipping-service:
-    build:
-      context: ./services/shipping
-      dockerfile: Dockerfile
-    container_name: wms-shipping
-    restart: unless-stopped
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: wms_nks
-      DB_USER: wms_admin
-      DB_PASSWORD: wms_secure_pass_2025
-      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
-      INVENTORY_SERVICE_URL: http://inventory-service:3000
-      LOG_LEVEL: debug
-    ports:
-      - "3014:3000"
-    volumes:
-      - ./services/shipping:/app
-      - /app/node_modules
-    networks:
-      - wms-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
   # ERP Connector Service
   erp-connector:
     build:
@@ -628,85 +592,6 @@ services:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3017/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Reports Service
-  reports-service:
-    build:
-      context: ./services/reports
-      dockerfile: Dockerfile
-    container_name: wms-reports
-    restart: unless-stopped
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: wms_nks
-      DB_USER: wms_admin
-      DB_PASSWORD: wms_secure_pass_2025
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: redis_pass_2025
-      REPORTS_STORAGE_PATH: /app/reports
-      LOG_LEVEL: debug
-    ports:
-      - "3018:3000"
-    volumes:
-      - ./services/reports:/app
-      - /app/node_modules
-      - reports_data:/app/reports
-    networks:
-      - wms-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  # Scheduler Service
-  scheduler-service:
-    build:
-      context: ./services/scheduler
-      dockerfile: Dockerfile
-    container_name: wms-scheduler
-    restart: unless-stopped
-    environment:
-      NODE_ENV: development
-      PORT: 3000
-      DB_HOST: postgres
-      DB_PORT: 5432
-      DB_NAME: wms_nks
-      DB_USER: wms_admin
-      DB_PASSWORD: wms_secure_pass_2025
-      REDIS_HOST: redis
-      REDIS_PORT: 6379
-      REDIS_PASSWORD: redis_pass_2025
-      RABBITMQ_URL: amqp://wms_queue:queue_pass_2025@rabbitmq:5672/wms
-      LOG_LEVEL: debug
-    ports:
-      - "3019:3000"
-    volumes:
-      - ./services/scheduler:/app
-      - /app/node_modules
-    networks:
-      - wms-network
-    depends_on:
-      postgres:
-        condition: service_healthy
-      redis:
-        condition: service_healthy
-      rabbitmq:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -817,5 +702,3 @@ volumes:
     name: wms-loki-data
   erp_data:
     name: wms-erp-data
-  reports_data:
-    name: wms-reports-data
