@@ -26,6 +26,11 @@
   "devDependencies": {
     "eslint": "^8.55.0",
     "jest": "^29.7.0",
+    "supertest": "^7.0.0",
     "nodemon": "^3.0.2"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 15000
   }
 }

@@ -4,6 +4,8 @@ const { Pool } = require('pg');
 const redis = require('redis');
 const winston = require('winston');
 const promClient = require('prom-client');
+const swaggerUi = require('swagger-ui-express');
+const openapi = require('./docs/openapi');
 const { errorHandler } = require('./middleware/errorHandler');
 require('dotenv').config();
 
@@ -155,6 +157,9 @@ const goodsReceiptsRoutes = require('./routes/goodsReceipts');
 const drumTypesRoutes = require('./routes/drumTypes');
 const pickNotesRoutes = require('./routes/pickNotes');
 
+// API docs
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapi));
+
 // API routes
 app.use('/api/v1/products', productsRoutes);
 app.use('/api/v1/locations', locationsRoutes);
@@ -206,12 +211,14 @@ app.use((req, res) => {
 });
 
 // Start server
-app.listen(PORT, () => {
-  logger.info(`Inventory Service running on port ${PORT}`);
-  logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
-  logger.info(`Health check: http://localhost:${PORT}/health`);
-  logger.info(`Metrics: http://localhost:${PORT}/metrics`);
-});
+if (process.env.NODE_ENV !== 'test') {
+  app.listen(PORT, () => {
+    logger.info(`Inventory Service running on port ${PORT}`);
+    logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
+    logger.info(`Health check: http://localhost:${PORT}/health`);
+    logger.info(`Metrics: http://localhost:${PORT}/metrics`);
+  });
+}
 
 // Graceful shutdown
 process.on('SIGTERM', async () => {
@@ -220,3 +227,6 @@ process.on('SIGTERM', async () => {
   await redisClient.quit();
   process.exit(0);
 });
+
+module.exports = { app, pool, redisClient };
+

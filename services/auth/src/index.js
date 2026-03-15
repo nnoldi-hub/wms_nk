@@ -7,6 +7,8 @@ const { createClient } = require('redis');
 const { Pool } = require('pg');
 const promClient = require('prom-client');
 const winston = require('winston');
+const swaggerUi = require('swagger-ui-express');
+const openapi = require('./docs/openapi');
 
 // Import routes
 const authRoutes = require('./routes/auth');
@@ -165,6 +167,9 @@ app.get('/metrics', async (req, res) => {
   res.end(await register.metrics());
 });
 
+// API docs
+app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapi));
+
 // API routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/users', userRoutes);
@@ -226,4 +231,9 @@ const startServer = async () => {
   }
 };
 
-startServer();
+// In test mode the test setup connects to Redis/DB directly; skip auto-start
+if (process.env.NODE_ENV !== 'test') {
+  startServer();
+}
+
+module.exports = { app, db, redis };
