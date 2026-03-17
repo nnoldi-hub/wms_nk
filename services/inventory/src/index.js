@@ -4,8 +4,12 @@ const { Pool } = require('pg');
 const redis = require('redis');
 const winston = require('winston');
 const promClient = require('prom-client');
-const swaggerUi = require('swagger-ui-express');
-const openapi = require('./docs/openapi');
+// swagger-ui-express opțional (disponibil doar dacă e instalat)
+let swaggerUi, openapi;
+try {
+  swaggerUi = require('swagger-ui-express');
+  openapi = require('./docs/openapi');
+} catch (_) { /* swagger nu e disponibil în acest mediu */ }
 const { errorHandler } = require('./middleware/errorHandler');
 require('dotenv').config();
 
@@ -156,9 +160,12 @@ const purchaseOrdersRoutes = require('./routes/purchaseOrders');
 const goodsReceiptsRoutes = require('./routes/goodsReceipts');
 const drumTypesRoutes = require('./routes/drumTypes');
 const pickNotesRoutes = require('./routes/pickNotes');
+const palletsRoutes = require('./routes/pallets');
 
-// API docs
-app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapi));
+// API docs (opțional)
+if (swaggerUi && openapi) {
+  app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(openapi));
+}
 
 // API routes
 app.use('/api/v1/products', productsRoutes);
@@ -169,6 +176,7 @@ app.use('/api/v1/goods-receipts', goodsReceiptsRoutes);
 app.use('/api/v1/drum-types', drumTypesRoutes);
 app.use('/api/v1/movements', movementsRoutes);
 app.use('/api/v1/batches', batchesRoutes);
+app.use('/api/v1/pallets', palletsRoutes);
 app.use('/api/v1/transformations', transformationsRoutes);
 app.use('/api/v1/inventory', inventoryRoutes);
 app.use('/api/v1', importRoutes);

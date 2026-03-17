@@ -201,9 +201,13 @@ class PurchaseOrderController {
       const skipped = [];
 
       for (const po of orders) {
-        if (!po.order_number || !po.supplier_name) {
-          skipped.push({ order_number: po.order_number, reason: 'Nr. comanda sau furnizor lipsa' });
+        if (!po.order_number) {
+          skipped.push({ order_number: po.order_number, reason: 'Nr. comanda lipsa' });
           continue;
+        }
+        // Supplier_name optional la import bulk (PDF poate să nu-l conțină)
+        if (!po.supplier_name) {
+          po.supplier_name = 'Furnizor neidentificat';
         }
         // Skip duplicates
         const exists = await client.query(

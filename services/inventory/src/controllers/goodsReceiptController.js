@@ -227,46 +227,87 @@ class GoodsReceiptController {
         [id]
       );
 
-      // Pentru fiecare linie cu product_sku (cabluri), creeaza product_batch
+      // Helper: slugifica un text pentru a genera SKU
+      const toSku = (text) =>
+        text.trim().toUpperCase()
+          .replace(/[^A-Z0-9.\-_]/g, '-')
+          .replace(/-+/g, '-')
+          .replace(/^-|-$/g, '')
+          .slice(0, 50);
+
+      // Pentru fiecare linie receptata, creeaza product_batch
       for (const line of linesResult.rows) {
-        if (!line.product_sku || parseFloat(line.cant_received) <= 0) continue;
+        if (parseFloat(line.cant_received) <= 0) continue;
 
-        // Verifica produsul
-        const productCheck = await client.query(
-          'SELECT sku FROM products WHERE sku = $1',
-          [line.product_sku]
-        );
-        if (productCheck.rows.length === 0) continue;
+        // ── Auto-upsert produs în catalogul products ────────────────────────
+        let productSku = line.product_sku || null;
+        if (!productSku) {
+          const rawSku = (line.cod_material && line.cod_material.trim())
+            ? toSku(line.cod_material)
+            : (line.material_name ? toSku(line.material_name) : null);
 
-        // Determina unit_id
+          if (rawSku) {
+            const uom = line.unit === 'Km' ? 'm' : (line.unit || 'buc');
+            const upsertProd = await client.query(
+              `INSERT INTO products (sku, name, uom, lot_control)
+               VALUES ($1, $2, $3, true)
+               ON CONFLICT (sku) DO UPDATE
+                 SET name = EXCLUDED.name, updated_at = NOW()
+               RETURNING sku`,
+              [rawSku, line.material_name || rawSku, uom]
+            );
+            productSku = upsertProd.rows[0].sku;
+            // Salveaza product_sku pe linia NIR pentru trasabilitate
+            await client.query(
+              'UPDATE goods_receipt_lines SET product_sku = $1 WHERE id = $2',
+              [productSku, line.id]
+            );
+          }
+        }
+        // ────────────────────────────────────────────────────────────────────
+
+        // Determina unit_id — ROLL pentru Km, PIECE pentru restul
         const unitCode = line.unit === 'Km' ? 'ROLL' : 'PIECE';
-        const unitResult = await client.query(
+        let unitResult = await client.query(
           'SELECT id FROM product_units WHERE code = $1',
           [unitCode]
         );
-        if (unitResult.rows.length === 0) continue;
+        // Fallback: orice unitate disponibila
+        if (unitResult.rows.length === 0) {
+          unitResult = await client.query('SELECT id FROM product_units LIMIT 1');
+        }
+        if (unitResult.rows.length === 0) continue; // nu exista nicio unitate de masura
 
         const unit_id = unitResult.rows[0].id;
-        // Cantitate in unitati de baza (m pentru Km, buc pentru Buc)
         const cantReceptata = parseFloat(line.cant_received);
+        // Cantitate in unitati de baza: m pentru Km, altfel cantitatea bruta
         const qty = line.unit === 'Km' ? cantReceptata * 1000 : cantReceptata;
 
         const batchNumber = `NIR-${nirNumber}-L${line.line_number}`;
+        // Lot identifier din notes linie (ex: ##E1000 ENERGOPLAST SA 0-1012 1012 M)
         const batchNotes = [
+          line.notes || null,           // lot identifier (tambur + metraj)
           `NIR: ${nirNumber}`,
+          line.material_name ? `Material: ${line.material_name}` : null,
           `Furnizor: ${gr.supplier_name}`,
           gr.invoice_number ? `Factura: ${gr.invoice_number}` : null,
           gr.gestiune ? `Gestiune: ${gr.gestiune}` : null,
         ].filter(Boolean).join(' | ');
 
+        // Gaseste zona RECV pentru locatia temporara de receptie
+        const recvLocation = await client.query(
+          `SELECT id FROM locations WHERE zone = 'RECV' ORDER BY id LIMIT 1`
+        );
+        const recvLocationId = recvLocation.rows.length > 0 ? recvLocation.rows[0].id : null;
+
         const batchResult = await client.query(
           `INSERT INTO product_batches
              (batch_number, product_sku, unit_id, initial_quantity, current_quantity,
-              length_meters, status, notes)
-           VALUES ($1,$2,$3,$4,$4,$5,'INTACT',$6)
+              length_meters, status, location_id, notes)
+           VALUES ($1,$2,$3,$4,$4,$5,'PENDING_PUTAWAY',$6,$7)
            RETURNING id`,
-          [batchNumber, line.product_sku, unit_id, qty,
-           line.unit === 'Km' ? qty : null, batchNotes]
+          [batchNumber, productSku, unit_id, qty,
+           line.unit === 'Km' ? qty : null, recvLocationId, batchNotes]
         );
 
         await client.query(
@@ -278,7 +319,7 @@ class GoodsReceiptController {
         if (line.order_line_id) {
           await client.query(
             `UPDATE supplier_order_lines
-             SET received_qty = received_qty + $1
+             SET received_qty = COALESCE(received_qty, 0) + $1
              WHERE id = $2`,
             [cantReceptata, line.order_line_id]
           );
@@ -314,8 +355,10 @@ class GoodsReceiptController {
         [id]
       );
       const finalLines = await pool.query(
-        `SELECT grl.*, dt.code AS drum_type_code, dt.name AS drum_type_name
+        `SELECT grl.*, pb.batch_number, pb.id AS product_batch_id,
+                dt.code AS drum_type_code, dt.name AS drum_type_name
          FROM goods_receipt_lines grl
+         LEFT JOIN product_batches pb ON pb.id = grl.batch_id
          LEFT JOIN drum_types dt ON dt.id = grl.drum_type_id
          WHERE grl.receipt_id = $1
          ORDER BY grl.line_number`,

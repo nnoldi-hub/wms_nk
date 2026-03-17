@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../src/index');
+const { app, pool } = require('../src/index');
 const db = require('../src/config/database');
 const { getToken } = require('./helpers');
 const { v4: uuidv4 } = require('uuid');

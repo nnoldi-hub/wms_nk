@@ -65,7 +65,7 @@ export default function NotificationBell() {
   return (
     <>
       <Tooltip title={tooltipText}>
-        <IconButton color="inherit" onClick={handleOpen} sx={{ mr: 1 }}>
+        <IconButton color="inherit" onClick={handleOpen} sx={{ mr: 1 }} data-tutorial="notification-bell">
           <Badge badgeContent={badgeCount > 0 ? badgeCount : undefined} color={badgeColor as 'error' | 'warning'} max={99}>
             {!connected
               ? <CircularProgress size={20} color="inherit" thickness={5} />

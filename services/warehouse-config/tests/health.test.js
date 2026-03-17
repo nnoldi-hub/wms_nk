@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../src/index');
+const { app, pool } = require('../src/index');
 
 describe('Health endpoint', () => {
   it('GET /health returns healthy status', async () => {

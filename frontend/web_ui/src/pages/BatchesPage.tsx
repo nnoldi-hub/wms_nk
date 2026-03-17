@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { QRCodeSVG } from 'qrcode.react';
 import {
   Box,
   Button,
@@ -26,6 +27,8 @@ import DeleteIcon from '@mui/icons-material/Delete';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import ContentCutIcon from '@mui/icons-material/ContentCut';
+import QrCode2Icon from '@mui/icons-material/QrCode2';
+import PrintIcon from '@mui/icons-material/Print';
 import axios from 'axios';
 import { batchService, type Batch, type CreateBatchDto, type UpdateBatchDto, type BatchStatistics } from '../services/batch.service';
 import { productsService } from '../services/products.service';
@@ -52,6 +55,7 @@ export const BatchesPage = () => {
   const [viewingBatch, setViewingBatch] = useState<Batch | null>(null);
   const [statistics, setStatistics] = useState<BatchStatistics | null>(null);
   const [openCutDialog, setOpenCutDialog] = useState(false);
+  const [qrBatch, setQrBatch] = useState<Batch | null>(null);
 
   const [formData, setFormData] = useState<CreateBatchDto>({
     product_sku: '',
@@ -240,6 +244,11 @@ export const BatchesPage = () => {
           <Tooltip title="Simulează tăiere">
             <IconButton size="small" onClick={() => { setViewingBatch(params.row); setOpenCutDialog(true); }}>
               <ContentCutIcon />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Etichetă QR">
+            <IconButton size="small" color="primary" onClick={() => setQrBatch(params.row)}>
+              <QrCode2Icon />
             </IconButton>
           </Tooltip>
           <Tooltip title="Edit">
@@ -493,7 +502,11 @@ export const BatchesPage = () => {
                 </Box>
                 <Box>
                   <Typography variant="subtitle2" color="textSecondary">Product</Typography>
-                  <Typography variant="body1">{viewingBatch.product_sku} - {viewingBatch.product_name}</Typography>
+                  <Typography variant="body1">
+                    {viewingBatch.product_name
+                      ? (viewingBatch.product_sku ? `${viewingBatch.product_sku} - ${viewingBatch.product_name}` : viewingBatch.product_name)
+                      : (viewingBatch.product_sku || '-')}
+                  </Typography>
                 </Box>
                 <Box>
                   <Typography variant="subtitle2" color="textSecondary">Unit</Typography>
@@ -521,7 +534,9 @@ export const BatchesPage = () => {
                 )}
                 <Box>
                   <Typography variant="subtitle2" color="textSecondary">Location</Typography>
-                  <Typography variant="body1">{viewingBatch.location_code || '-'}</Typography>
+                  <Typography variant="body1" fontFamily="monospace" fontWeight={viewingBatch.location_id ? 600 : 400} color={viewingBatch.location_id ? 'success.main' : 'text.disabled'}>
+                    {viewingBatch.location_code || viewingBatch.location_id || '-'}
+                  </Typography>
                 </Box>
                 <Box>
                   <Typography variant="subtitle2" color="textSecondary">Received At</Typography>
@@ -541,6 +556,168 @@ export const BatchesPage = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={() => setOpenDetailsDialog(false)}>Close</Button>
+          {viewingBatch && (
+            <Button variant="outlined" startIcon={<QrCode2Icon />} onClick={() => { setQrBatch(viewingBatch); setOpenDetailsDialog(false); }}>
+              Etichetă QR
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Etichetă QR */}
+      <Dialog open={!!qrBatch} onClose={() => setQrBatch(null)} maxWidth="xs" fullWidth>
+        <DialogTitle>🏷️ Etichetă QR — {qrBatch?.batch_number}</DialogTitle>
+        <DialogContent>
+          {qrBatch && (() => {
+            const notes = qrBatch.notes || '';
+            const lotLine = notes.split(' | ')[0] || '';
+            const isLot = lotLine.startsWith('##');
+
+            // Parsare tambur: ##E1000 → "E1000"
+            const tamburMatch = lotLine.match(/^##(\S+)/);
+            const tambur = tamburMatch ? tamburMatch[1] : '';
+
+            // Parsare tip ambalaj din notes: "Ambalaj: T1000"
+            const ambalajType = notes.match(/Ambalaj:\s*([A-Z0-9]+)/)?.[1] || '';
+            const ambalajIcon = ambalajType === 'COLAC' ? '🔄' : ambalajType === 'CUTIE' ? '📦' : ambalajType ? '🥁' : '🥁';
+            const ambalajLabel = ambalajType === 'COLAC' ? 'Colac' : ambalajType === 'CUTIE' ? 'Cutie' :
+              ambalajType ? `Tambur ${ambalajType}` : '';
+
+            // Parsare numerotare: "0-3095" din "##E1000 FURNIZOR 0-3095 3095 M"
+            const numerotareMatch = lotLine.match(/(\d+)-(\d+)\s+\d+\s*M/i);
+            const metrajStart = numerotareMatch ? numerotareMatch[1] : '';
+            const metrajFinal = numerotareMatch ? numerotareMatch[2] : '';
+
+            // Parsare material din notes: "Material: CYABY-F 5X4 NEGRU"
+            const matFromNotes = notes.match(/Material:\s*([^|]+)/)?.[1]?.trim().replace(/^\d+\s+/, '') || '';
+            const materialName = matFromNotes
+              || (qrBatch.product_name || '').replace(/^\d+\s+/, '')
+              || qrBatch.product_sku
+              || '';
+
+            const locationCode = qrBatch.location_code || qrBatch.location_id || '';
+            const km = qrBatch.length_meters ? (qrBatch.length_meters / 1000).toFixed(3) : null;
+
+            const qrData = JSON.stringify({
+              t: 'BATCH',
+              bn: qrBatch.batch_number,
+              tambur,
+              mat: materialName,
+              metraj: metrajStart && metrajFinal ? `${metrajStart}-${metrajFinal}` : undefined,
+              qty: km || qrBatch.current_quantity,
+              unit: km ? 'Km' : (qrBatch.unit_code || 'Buc'),
+              loc: locationCode,
+            });
+
+            return (
+              <Box>
+                {/* Etichetă vizuală */}
+                <Box
+                  id="qr-label-print"
+                  sx={{
+                    border: '2px solid #1565c0',
+                    borderRadius: 2,
+                    p: 2.5,
+                    textAlign: 'center',
+                    bgcolor: 'white',
+                    mb: 2,
+                  }}
+                >
+                  <Typography variant="caption" color="text.secondary" display="block" mb={0.5} fontWeight={700} letterSpacing={1}>
+                    NK SMART CABLES SRL
+                  </Typography>
+                  <QRCodeSVG value={qrData} size={180} level="M" style={{ display: 'block', margin: '0 auto 12px' }} />
+
+                  {/* Denumire cablu — principal */}
+                  {materialName && (
+                    <Typography fontSize="1rem" fontWeight={800} color="text.primary" mt={0.5} lineHeight={1.2}>
+                      {materialName}
+                    </Typography>
+                  )}
+
+                  {/* Numerotare: de la - până la */}
+                  {metrajStart && metrajFinal && (
+                    <Box sx={{ mt: 1, mb: 0.5 }}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Numerotare (metraj)
+                      </Typography>
+                      <Typography fontSize="1.05rem" fontWeight={700} fontFamily="monospace" color="primary.dark">
+                        {metrajStart} m → {metrajFinal} m
+                      </Typography>
+                      {km && (
+                        <Typography fontSize="0.8rem" color="text.secondary">
+                          ({km} Km total)
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
+                  {!metrajStart && km && (
+                    <Typography fontSize="0.9rem" mt={0.5} fontWeight={600}>
+                      {km} Km
+                    </Typography>
+                  )}
+
+                  {/* Tambur + Tip Ambalaj */}
+                  {(tambur || ambalajType) && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Ambalaj
+                      </Typography>
+                      <Typography fontSize="0.95rem" fontWeight={700} fontFamily="monospace">
+                        {ambalajIcon} {ambalajLabel}{tambur ? ` · ${tambur}` : ''}
+                      </Typography>
+                    </Box>
+                  )}
+
+                  {/* Locație */}
+                  {locationCode && (
+                    <Box sx={{ mt: 1 }}>
+                      <Typography variant="caption" color="text.secondary" display="block">
+                        Locație depozit
+                      </Typography>
+                      <Chip
+                        label={`📍 ${locationCode}`}
+                        size="small"
+                        color="success"
+                        sx={{ fontFamily: 'monospace', fontWeight: 700 }}
+                      />
+                    </Box>
+                  )}
+
+                  {/* Batch number mic jos */}
+                  <Typography fontFamily="monospace" fontSize="0.72rem" color="text.disabled" mt={1.5}>
+                    {qrBatch.batch_number}
+                  </Typography>
+                </Box>
+                <Typography variant="caption" color="text.secondary" display="block" textAlign="center">
+                  Scanați cu aplicația WMS pentru identificare rapidă
+                </Typography>
+              </Box>
+            );
+          })()}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setQrBatch(null)}>Închide</Button>
+          <Button
+            variant="contained"
+            startIcon={<PrintIcon />}
+            onClick={() => {
+              const el = document.getElementById('qr-label-print');
+              if (!el || !qrBatch) return;
+              const w = window.open('', '_blank', 'width=420,height=560');
+              if (!w) return;
+              w.document.write(`<!DOCTYPE html><html><head><title>Etichetă ${qrBatch.batch_number}</title>
+                <style>
+                  body{margin:16px;font-family:Arial,sans-serif;text-align:center}
+                  svg{display:block;margin:0 auto 12px}
+                  .MuiChip-root{display:inline-block;background:#2e7d32;color:white;padding:2px 10px;border-radius:16px;font-family:monospace;font-weight:700}
+                </style>
+                </head><body>${el.innerHTML}<script>window.print();window.close();<\/script></body></html>`);
+              w.document.close();
+            }}
+          >
+            Printează
+          </Button>
         </DialogActions>
       </Dialog>
 

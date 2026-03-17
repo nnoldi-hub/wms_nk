@@ -5,7 +5,7 @@ import {
   TableHead, TableRow, Button, Dialog, DialogTitle, DialogContent,
   DialogActions, TextField, Select, MenuItem, FormControl, InputLabel,
   Chip, IconButton, Tooltip, Stack, Autocomplete, Alert, LinearProgress,
-  Tab, Tabs,
+  Tab, Tabs, CircularProgress,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -17,6 +17,8 @@ import SyncIcon from '@mui/icons-material/Sync';
 import DownloadIcon from '@mui/icons-material/Download';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import ErrorIcon from '@mui/icons-material/Error';
+import PictureAsPdfIcon from '@mui/icons-material/PictureAsPdf';
+import { parsePdfPurchaseOrder } from '../utils/parsePdfPurchaseOrder';
 
 // ─── CSV helpers ─────────────────────────────────────────────────────────────
 // Expected CSV columns (tab or comma separated):
@@ -187,11 +189,18 @@ export default function ComenziFurnizorPage() {
   // Import CSV state
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [importTab, setImportTab] = useState(0); // 0=CSV, 1=ERP
+  const [importTab, setImportTab] = useState(0); // 0=CSV, 1=ERP, 2=PDF
   const [csvPreview, setCsvPreview] = useState<ImportPO[]>([]);
   const [csvError, setCsvError] = useState('');
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
+
+  // PDF import state
+  const pdfInputRef = useRef<HTMLInputElement>(null);
+  const [pdfPO, setPdfPO] = useState<ImportPO | null>(null);
+  const [pdfErrors, setPdfErrors] = useState<string[]>([]);
+  const [pdfWarnings, setPdfWarnings] = useState<string[]>([]);
+  const [pdfLoading, setPdfLoading] = useState(false);
 
   // ERP sync state
   const [erpUrl, setErpUrl] = useState(localStorage.getItem(ERP_URL_KEY) || '');
@@ -377,6 +386,29 @@ export default function ComenziFurnizorPage() {
     }
   };
 
+  // ─── PDF Import handlers ─────────────────────────────────────────────────
+  const handlePdfChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPdfPO(null); setPdfErrors([]); setPdfWarnings([]); setImportResult(null);
+    setPdfLoading(true);
+    try {
+      const { po, errors, warnings } = await parsePdfPurchaseOrder(file);
+      setPdfPO(po);
+      setPdfErrors(errors);
+      setPdfWarnings(warnings);
+    } catch (err) {
+      setPdfErrors([(err as Error).message ?? 'Eroare la parsare PDF']);
+    }
+    setPdfLoading(false);
+    e.target.value = '';
+  };
+
+  const handlePdfImport = async () => {
+    if (!pdfPO) return;
+    await handleImportBulk([pdfPO], 'PDF_IMPORT');
+  };
+
   const closeImport = () => {
     setImportOpen(false);
     setCsvPreview([]);
@@ -384,6 +416,9 @@ export default function ComenziFurnizorPage() {
     setImportResult(null);
     setErpPreview([]);
     setErpError('');
+    setPdfPO(null);
+    setPdfErrors([]);
+    setPdfWarnings([]);
   };
 
   return (
@@ -405,14 +440,19 @@ export default function ComenziFurnizorPage() {
             onClick={() => { setImportTab(0); setImportOpen(true); }}>
             Import CSV
           </Button>
+          <Button variant="outlined" color="error" startIcon={<PictureAsPdfIcon />}
+            onClick={() => { setImportTab(2); setImportOpen(true); }}>
+            Import PDF
+          </Button>
           <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate} size="large">
             Comandă Nouă
           </Button>
         </Stack>
       </Stack>
 
-      {/* hidden file input */}
+      {/* hidden file inputs */}
       <input ref={fileInputRef} type="file" accept=".csv,.tsv,.txt" style={{ display: 'none' }} onChange={handleFileChange} />
+      <input ref={pdfInputRef} type="file" accept=".pdf" style={{ display: 'none' }} onChange={e => void handlePdfChange(e)} />
 
       {/* Filter bar */}
       <Stack direction="row" spacing={2} mb={2}>
@@ -738,6 +778,7 @@ export default function ComenziFurnizorPage() {
           <Tabs value={importTab} onChange={(_, v: number) => setImportTab(v)} sx={{ mb: 2 }}>
             <Tab label="📂 Import CSV / TSV" />
             <Tab label="🔗 Sincronizare ERP" />
+            <Tab label="📄 Import PDF" />
           </Tabs>
 
           {/* ── Tab 0: CSV Import ── */}
@@ -907,6 +948,100 @@ export default function ComenziFurnizorPage() {
               {importing && <LinearProgress sx={{ mt: 1 }} />}
             </Box>
           )}
+
+          {/* ── Tab 2: PDF Import ── */}
+          {importTab === 2 && (
+            <Box>
+              {!importResult ? (
+                <>
+                  <Alert severity="info" sx={{ mb: 2 }}>
+                    Selectează un PDF generat de ERP (format comandă de achiziție). Se vor extrage automat:
+                    numărul comenzii, furnizorul, datele și liniile de produse.
+                  </Alert>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    startIcon={pdfLoading ? <CircularProgress size={18} color="inherit" /> : <PictureAsPdfIcon />}
+                    onClick={() => pdfInputRef.current?.click()}
+                    disabled={pdfLoading}
+                    sx={{ mb: 2 }}
+                  >
+                    {pdfLoading ? 'Se procesează PDF...' : 'Alege Fișier PDF'}
+                  </Button>
+                  {pdfLoading && <LinearProgress sx={{ mb: 2 }} />}
+                  {pdfErrors.map((e, i) => (
+                    <Alert key={i} severity="error" icon={<ErrorIcon />} sx={{ mb: 1 }}>{e}</Alert>
+                  ))}
+                  {pdfWarnings.map((w, i) => (
+                    <Alert key={i} severity="warning" sx={{ mb: 1 }}>{w}</Alert>
+                  ))}
+                  {pdfPO && (
+                    <>
+                      <Alert severity="success" sx={{ mb: 2 }}>
+                        <strong>{pdfPO.order_number}</strong> — {pdfPO.supplier_name} —{' '}
+                        <strong>{pdfPO.lines.length} produse</strong> detectate.
+                        Total:{' '}
+                        <strong>
+                          {pdfPO.lines.reduce((s, l) => s + l.line_value, 0).toLocaleString('ro-RO', { minimumFractionDigits: 2 })} {pdfPO.currency}
+                        </strong>
+                      </Alert>
+                      <TableContainer component={Paper} variant="outlined" sx={{ maxHeight: 260, mb: 2 }}>
+                        <Table size="small" stickyHeader>
+                          <TableHead>
+                            <TableRow>
+                              {['#', 'Produs', 'SKU', 'Cant.', 'UM', 'Preț Listă', 'Disc%', 'Preț Unitar', 'Valoare'].map(h => (
+                                <TableCell key={h} sx={{ fontWeight: 700, bgcolor: 'grey.50' }}>{h}</TableCell>
+                              ))}
+                            </TableRow>
+                          </TableHead>
+                          <TableBody>
+                            {pdfPO.lines.map(l => (
+                              <TableRow key={l.line_number} hover>
+                                <TableCell sx={{ color: 'text.secondary' }}>{l.line_number}</TableCell>
+                                <TableCell><Typography variant="body2" fontWeight={600}>{l.product_name}</Typography></TableCell>
+                                <TableCell><Typography variant="caption" fontFamily="monospace">{l.product_sku || '—'}</Typography></TableCell>
+                                <TableCell align="right">{l.quantity}</TableCell>
+                                <TableCell>{l.unit}</TableCell>
+                                <TableCell align="right">{l.list_price > 0 ? l.list_price.toFixed(4) : '—'}</TableCell>
+                                <TableCell align="right">{l.discount_pct > 0 ? `${l.discount_pct}%` : '—'}</TableCell>
+                                <TableCell align="right">{l.unit_price.toFixed(4)}</TableCell>
+                                <TableCell align="right" sx={{ fontWeight: 700 }}>{l.line_value.toFixed(2)}</TableCell>
+                              </TableRow>
+                            ))}
+                          </TableBody>
+                        </Table>
+                      </TableContainer>
+                      <Button variant="text" size="small" startIcon={<PictureAsPdfIcon />}
+                        onClick={() => pdfInputRef.current?.click()}>
+                        Alege alt PDF
+                      </Button>
+                    </>
+                  )}
+                </>
+              ) : (
+                <Box sx={{ textAlign: 'center', py: 3 }}>
+                  <CheckCircleIcon sx={{ fontSize: 60, color: 'success.main', mb: 1 }} />
+                  <Typography variant="h6" color="success.main">Import PDF finalizat!</Typography>
+                  <Typography variant="body2" mt={1}>
+                    ✅ <strong>{importResult.created.length}</strong> comandă importată cu succes.
+                  </Typography>
+                  {importResult.skipped.length > 0 && (
+                    <Box mt={1}>
+                      <Typography variant="body2" color="warning.main">
+                        ⚠️ <strong>{importResult.skipped.length}</strong> comenzi sărite:
+                      </Typography>
+                      {importResult.skipped.map((s, i) => (
+                        <Typography key={i} variant="caption" color="text.secondary" display="block" ml={2}>
+                          • {s.order_number}: {s.reason}
+                        </Typography>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              )}
+              {importing && <LinearProgress sx={{ mt: 1 }} />}
+            </Box>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, py: 2 }}>
           <Button onClick={closeImport}>{importResult ? 'Închide' : 'Anulează'}</Button>
@@ -929,6 +1064,17 @@ export default function ComenziFurnizorPage() {
               startIcon={<SyncIcon />}
             >
               {importing ? 'Se importă...' : `Importă ${erpPreview.length} comenzi din ERP`}
+            </Button>
+          )}
+          {!importResult && importTab === 2 && pdfPO && !pdfLoading && pdfErrors.length === 0 && (
+            <Button
+              variant="contained"
+              color="error"
+              onClick={() => void handlePdfImport()}
+              disabled={importing}
+              startIcon={importing ? <CircularProgress size={18} color="inherit" /> : <PictureAsPdfIcon />}
+            >
+              {importing ? 'Se importă...' : 'Importă comanda din PDF'}
             </Button>
           )}
         </DialogActions>

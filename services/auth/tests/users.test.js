@@ -25,13 +25,17 @@ beforeAll(async () => {
   await db.query(`
     INSERT INTO users (id, username, email, password_hash, role)
     VALUES ($1, $2, $3, $4, 'admin')
-    ON CONFLICT (id) DO NOTHING
+    ON CONFLICT DO NOTHING
   `, [adminId, 'test_admin_fixture', 'test_admin@wms.test', hash]);
 
   adminToken = getToken('admin', { userId: adminId, username: 'test_admin_fixture' });
 });
 
 afterAll(async () => {
+  // Delete audit_logs first to avoid FK constraint when deleting users
+  const adminId = '00000000-0000-0000-0000-000000000001';
+  await db.query('DELETE FROM audit_logs WHERE user_id = ANY($1::uuid[])',
+    [[adminId, createdUserId].filter(Boolean)]).catch(() => {});
   if (createdUserId) {
     await db.query('DELETE FROM users WHERE id = $1', [createdUserId]);
   }

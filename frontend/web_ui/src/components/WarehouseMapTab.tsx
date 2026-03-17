@@ -15,6 +15,7 @@ import WbSunnyIcon from '@mui/icons-material/WbSunny';
 import CategoryIcon from '@mui/icons-material/Category';
 import SpeedIcon from '@mui/icons-material/Speed';
 import RouteIcon from '@mui/icons-material/Route';
+import InventoryIcon from '@mui/icons-material/Inventory';
 import PlayArrowIcon from '@mui/icons-material/PlayArrow';
 import StopIcon from '@mui/icons-material/Stop';
 import NavigateNextIcon from '@mui/icons-material/NavigateNext';
@@ -58,7 +59,7 @@ interface Props {
 }
 
 // ─── Tipuri view mode ────────────────────────────────────────────────────────
-type ViewMode = 'status' | 'heatmap' | 'type' | 'rotation';
+type ViewMode = 'status' | 'heatmap' | 'type' | 'rotation' | 'stock';
 
 // ─── Culori status ────────────────────────────────────────────────────────────
 
@@ -103,6 +104,25 @@ const TYPE_PALETTE = [
   '#00695c', '#f9a825', '#5d4037', '#0277bd',
 ];
 
+// Culori stoc per locatie (0=gri → >5000=portocaliu)
+function getStockColor(totalQty: number | undefined): string {
+  if (totalQty === undefined || totalQty === 0) return '#1c1c2e';
+  if (totalQty < 100)  return '#0d47a1'; // < 100 m – albastru închis
+  if (totalQty < 500)  return '#1565c0'; // 100–500 m
+  if (totalQty < 2000) return '#2e7d32'; // 500–2000 m – verde
+  if (totalQty < 8000) return '#f9a825'; // 2000–8000 m – chihlimbar
+  return '#bf360c';                       // > 8000 m – portocaliu aprins
+}
+
+const STOCK_LEGEND = [
+  { label: 'Fără stoc',       color: '#1c1c2e' },
+  { label: '< 100 m',         color: '#0d47a1' },
+  { label: '100 – 500 m',     color: '#1565c0' },
+  { label: '500 – 2000 m',    color: '#2e7d32' },
+  { label: '2000 – 8000 m',   color: '#f9a825' },
+  { label: '> 8000 m',        color: '#bf360c' },
+];
+
 // Culori rotatie produs (0=lent-albastru → 100=rapid-rosu)
 function getRotationColor(score: number | undefined): string {
   if (score === undefined) return '#1c1c2e'; // fara date
@@ -122,10 +142,17 @@ const ROTATION_LEGEND = [
   { label: 'Foarte rapid (>75%)', color: '#b71c1c' },
 ];
 
-function getCellColor(loc: LocationMapItem, viewMode: ViewMode, typeColorMap: Record<string, string>, rotationMap: Record<string, number>): string {
-  if (viewMode === 'heatmap') return HEATMAP_COLOR[loc.status] || '#555';
-  if (viewMode === 'type') return typeColorMap[loc.type_name || '—'] || '#555';
+function getCellColor(
+  loc: LocationMapItem,
+  viewMode: ViewMode,
+  typeColorMap: Record<string, string>,
+  rotationMap: Record<string, number>,
+  stockByLocation: Record<string, { totalQty: number }>,
+): string {
+  if (viewMode === 'heatmap')  return HEATMAP_COLOR[loc.status] || '#555';
+  if (viewMode === 'type')     return typeColorMap[loc.type_name || '—'] || '#555';
   if (viewMode === 'rotation') return getRotationColor(rotationMap[loc.location_code]);
+  if (viewMode === 'stock')    return getStockColor(stockByLocation[loc.location_code]?.totalQty);
   return STATUS_COLOR[loc.status] || '#555';
 }
 
@@ -151,6 +178,10 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
   const [hovered, setHovered] = useState<LocationMapItem | null>(null);
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
+
+  // ── Stoc per locatie ──
+  interface StockEntry { totalQty: number; batchCount: number }
+  const [stockByLocation, setStockByLocation] = useState<Record<string, StockEntry>>({});
 
   // ── Rotatie produs ──
   const [rotationMap, setRotationMap] = useState<Record<string, number>>({});
@@ -190,6 +221,24 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
     } catch { /* fail silently */ } finally {
       setLoadingRotation(false);
     }
+  }, []);
+
+  // ── Incarcare stoc per locatie ──
+  const loadStockData = useCallback(async () => {
+    try {
+      const resp = await invClient().get('/batches', { params: { limit: 5000 } });
+      const batches: Array<{ location_code?: string; current_quantity?: number }> =
+        resp.data?.data ?? resp.data ?? [];
+      const byLoc: Record<string, StockEntry> = {};
+      for (const b of batches) {
+        if (!b.location_code) continue;
+        const qty = Number(b.current_quantity ?? 0);
+        if (!byLoc[b.location_code]) byLoc[b.location_code] = { totalQty: 0, batchCount: 0 };
+        byLoc[b.location_code].totalQty += qty;
+        if (qty > 0) byLoc[b.location_code].batchCount++;
+      }
+      setStockByLocation(byLoc);
+    } catch { /* fail silently */ }
   }, []);
 
   // ── Incarcare joburi picking disponibile ──
@@ -253,6 +302,7 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
   }, [zones, selectedZoneId]);
 
   useEffect(() => { loadLocations(); }, [loadLocations]);
+  useEffect(() => { if (selectedZoneId) loadStockData(); }, [selectedZoneId, loadStockData]);
   useEffect(() => { if (viewMode === 'rotation') loadRotationData(); }, [viewMode, loadRotationData]);
   useEffect(() => { if (trailOpen) loadPickJobs(); }, [trailOpen, loadPickJobs]);
   useEffect(() => { if (selectedJobId) loadPickingTrail(); }, [selectedJobId, loadPickingTrail]);
@@ -428,6 +478,12 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
               Rotație
             </ToggleButton>
           </MuiTooltip>
+          <MuiTooltip title="Colorare după cantitate stoc curent (m)">
+            <ToggleButton value="stock" color="success">
+              <InventoryIcon fontSize="small" sx={{ mr: 0.5 }} />
+              Stoc
+            </ToggleButton>
+          </MuiTooltip>
         </ToggleButtonGroup>
 
         <MuiTooltip title={trailOpen ? 'Inchide panoul traseu picking' : 'Deschide traseu picking vizual'}>
@@ -452,7 +508,7 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
           <ToggleButton value="edit" color="warning"><EditLocationIcon fontSize="small" sx={{ mr: 0.5 }} />Editare</ToggleButton>
         </ToggleButtonGroup>
 
-        <Button size="small" startIcon={<RefreshIcon />} onClick={loadLocations}>
+        <Button size="small" startIcon={<RefreshIcon />} onClick={() => { loadLocations(); loadStockData(); }}>
           Reîncarcă
         </Button>
       </Stack>
@@ -507,7 +563,7 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
                           const isTrailLoc = trailLocCodes.includes(loc?.location_code ?? '');
                           const trailPositions = loc ? trailIndexMap[loc.location_code] : undefined;
                           const isActiveStep = trailStep >= 0 && trailPositions?.includes(trailStep + 1);
-                          const bg = loc ? getCellColor(loc, viewMode, typeColorMap, rotationMap) : (mode === 'edit' ? '#1a1a2e' : '#0d0d0d');
+                          const bg = loc ? getCellColor(loc, viewMode, typeColorMap, rotationMap, stockByLocation) : (mode === 'edit' ? '#1a1a2e' : '#0d0d0d');
                           return (
                             <Box
                               key={x}
@@ -593,6 +649,23 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
                         Culoar {hovered.aisle} · Raft {hovered.rack} · Nivel {hovered.shelf_level}
                       </Typography>
                     )}
+                    {/* Stoc real din inventory */}
+                    {(() => {
+                      const s = stockByLocation[hovered.location_code];
+                      return (
+                        <Box mt={0.5} pt={0.5} sx={{ borderTop: '1px solid', borderColor: 'grey.700' }}>
+                          {s && s.totalQty > 0 ? (
+                            <Typography variant="caption" display="block" color="success.light" fontWeight={700}>
+                              📦 Stoc: {s.totalQty.toLocaleString('ro-RO')} m · {s.batchCount} lot{s.batchCount !== 1 ? 'uri' : ''}
+                            </Typography>
+                          ) : (
+                            <Typography variant="caption" display="block" color="text.disabled">
+                              Fără stoc
+                            </Typography>
+                          )}
+                        </Box>
+                      );
+                    })()}
                     {mode === 'edit' && (
                       <Typography variant="caption" display="block" color="warning.main" mt={0.5}>Click pentru editare coordonate</Typography>
                     )}
@@ -606,7 +679,7 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
           <Box sx={{ minWidth: 220, flexShrink: 0 }}>
             {/* Legendă — dinamica dupa viewMode */}
             <Typography variant="overline" display="block" gutterBottom>
-              {viewMode === 'heatmap' ? 'Heatmap Ocupare' : viewMode === 'type' ? 'Tip Locație' : 'Legendă Status'}
+              {viewMode === 'heatmap' ? 'Heatmap Ocupare' : viewMode === 'type' ? 'Tip Locație' : viewMode === 'rotation' ? 'Rotație Produs' : viewMode === 'stock' ? 'Stoc Curent' : 'Legendă Status'}
             </Typography>
             <Stack spacing={0.8} mb={2}>
               {viewMode === 'status' && Object.entries(STATUS_LABEL).map(([s, label]) => (
@@ -643,6 +716,19 @@ export function WarehouseMapTab({ zones }: Omit<Props, 'warehouseId'> & { wareho
                   ))}
                   <Typography variant="caption" color="text.secondary" mt={1} display="block">
                     Rotatie = % din cantitatea initiala consumata
+                  </Typography>
+                </>
+              )}
+              {viewMode === 'stock' && (
+                <>
+                  {STOCK_LEGEND.map(r => (
+                    <Stack key={r.label} direction="row" spacing={1} alignItems="center">
+                      <Box sx={{ width: 16, height: 16, bgcolor: r.color, borderRadius: 0.5, flexShrink: 0 }} />
+                      <Typography variant="body2" fontSize={11}>{r.label}</Typography>
+                    </Stack>
+                  ))}
+                  <Typography variant="caption" color="text.secondary" mt={1} display="block">
+                    Stoc = cantitate curentă (m) din loturi active
                   </Typography>
                 </>
               )}

@@ -530,7 +530,7 @@ export function ScanPage() {
       </Typography>
 
       {/* Mode selector — always visible */}
-      <FormControl sx={{ minWidth: 220, mb: 3 }}>
+      <FormControl sx={{ minWidth: 220, mb: 3 }} data-tutorial="scan-mode">
         <InputLabel>Mod scanare</InputLabel>
         <Select
           label="Mod scanare"
@@ -551,7 +551,7 @@ export function ScanPage() {
       {/* ── Standard scan modes ── */}
       {mode !== 'PUTAWAY' && (
         <>
-          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }}>
+          <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2} sx={{ mb: 2 }} data-tutorial="scan-input">
             <TextField
               inputRef={inputRef}
               fullWidth
@@ -611,7 +611,7 @@ export function ScanPage() {
             </Card>
           )}
 
-          <Typography variant="h6" gutterBottom>
+          <Typography variant="h6" gutterBottom data-tutorial="scan-log">
             Istoric scanări
           </Typography>
           <Divider sx={{ mb: 2 }} />

@@ -540,6 +540,46 @@ class LocationController {
       next(error);
     }
   }
+
+  // GET /api/v1/locations/available?location_type_code=X&limit=20
+  // Returns available locations across all zones, optionally filtered by location type code.
+  // Used by PutawayTasksPage to suggest locations based on putaway rules (S2.2).
+  async getAvailable(req, res, next) {
+    try {
+      const { location_type_code, limit = 20 } = req.query;
+      const params = [];
+      let typeFilter = '';
+      if (location_type_code) {
+        params.push(location_type_code);
+        typeFilter = `AND lt.code = $${params.length}`;
+      }
+      params.push(parseInt(limit) || 20);
+      const result = await db.query(`
+        SELECT
+          l.id,
+          l.location_code,
+          l.status,
+          l.capacity_m3,
+          lt.code   AS type_code,
+          lt.name   AS type_name,
+          wz.zone_code,
+          wz.zone_name,
+          wz.zone_type
+        FROM locations l
+        LEFT JOIN location_types lt       ON lt.id  = l.location_type_id
+        LEFT JOIN warehouse_zones wz      ON wz.id  = l.zone_id
+        WHERE (l.is_active = true OR l.is_active IS NULL)
+          AND l.status = 'AVAILABLE'
+          ${typeFilter}
+        ORDER BY lt.code, wz.zone_code, l.location_code
+        LIMIT $${params.length}
+      `, params);
+      res.json({ success: true, data: result.rows });
+    } catch (error) {
+      logger.error('Get available locations error:', error);
+      next(error);
+    }
+  }
 }
 
 module.exports = new LocationController();

@@ -7,7 +7,7 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'wms_jwt_secret_key_2025';
 
 const request = require('supertest');
 const { app, pool } = require('../src/index');
-const { getToken } = require('./helpers');
+const { getToken, setupTestUser, cleanupTestUser } = require('./helpers');
 
 const adminToken = getToken('admin');
 const operatorToken = getToken('operator');
@@ -16,10 +16,12 @@ const testSku = `TEST-SKU-${Date.now()}`;
 
 beforeAll(async () => {
   await pool.query('SELECT 1');
+  await setupTestUser(pool);
 });
 
 afterAll(async () => {
   await pool.query('DELETE FROM products WHERE sku = $1', [testSku]);
+  await cleanupTestUser(pool);
 });
 
 // ─── GET /api/v1/products ─────────────────────────────────────────────────────
@@ -51,7 +53,8 @@ describe('POST /api/v1/products', () => {
       .send({ sku: testSku, name: 'Test Product', uom: 'm', lot_control: false });
 
     expect(res.statusCode).toBe(201);
-    expect(res.body).toHaveProperty('sku', testSku);
+    const product = res.body.data || res.body;
+    expect(product).toHaveProperty('sku', testSku);
   });
 
   it('rejects creating duplicate SKU', async () => {
@@ -91,7 +94,8 @@ describe('GET /api/v1/products/sku/:sku', () => {
       .set('Authorization', `Bearer ${adminToken}`);
 
     expect(res.statusCode).toBe(200);
-    expect(res.body).toHaveProperty('sku', testSku);
+    const product = res.body.data || res.body;
+    expect(product).toHaveProperty('sku', testSku);
   });
 
   it('returns 404 for unknown SKU', async () => {

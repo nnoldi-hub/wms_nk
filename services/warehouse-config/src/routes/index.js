@@ -10,6 +10,7 @@ const vehicleController = require('../controllers/vehicleController');
 const deliveryZoneController = require('../controllers/deliveryZoneController');
 const workflowController = require('../controllers/workflowController');
 const warehouseSettingsController = require('../controllers/warehouseSettingsController');
+const putawayRulesController = require('../controllers/putawayRulesController');
 const { authMiddleware, adminOnly, managerOrAdmin } = require('../middleware/auth');
 const { 
   validate, 
@@ -135,6 +136,9 @@ router.delete('/zones/:id',
 
 // GET /api/v1/zones/:zoneId/locations - Get all locations for zone
 router.get('/zones/:zoneId/locations', validateQuery(listLocationsQuerySchema), locationController.getAll);
+
+// GET /api/v1/locations/available - Available locations cross-zone (for putaway suggestions S2.2)
+router.get('/locations/available', locationController.getAvailable);
 
 // GET /api/v1/locations/:id - Get location by ID
 router.get('/locations/:id', locationController.getById);
@@ -363,6 +367,28 @@ router.post('/warehouse-settings',
   validate(require('../validators').createWarehouseSettingSchema),
   warehouseSettingsController.create
 );
+
+// ============================================================================
+// PUTAWAY RULES ROUTES
+// ============================================================================
+
+// GET /api/v1/putaway-rules
+router.get('/putaway-rules', putawayRulesController.list);
+
+// GET /api/v1/putaway-rules/suggest?packaging_type_code=COLAC
+router.get('/putaway-rules/suggest', putawayRulesController.suggest);
+
+// POST /api/v1/putaway-rules
+router.post('/putaway-rules', adminOnly, putawayRulesController.create);
+
+// POST /api/v1/putaway-rules/bulk
+router.post('/putaway-rules/bulk', adminOnly, putawayRulesController.bulk);
+
+// PUT /api/v1/putaway-rules/:id
+router.put('/putaway-rules/:id', adminOnly, putawayRulesController.update);
+
+// DELETE /api/v1/putaway-rules/:id
+router.delete('/putaway-rules/:id', adminOnly, putawayRulesController.remove);
 
 // PUT /api/v1/warehouse-settings/:id (Admin only)
 router.put('/warehouse-settings/:id', adminOnly, warehouseSettingsController.update);

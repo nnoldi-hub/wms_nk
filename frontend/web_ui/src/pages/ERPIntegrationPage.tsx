@@ -175,7 +175,7 @@ export default function ERPIntegrationPage() {
       </Grid>
 
       {/* Manual trigger buttons */}
-      <Box mb={3}>
+      <Box mb={3} data-tutorial="erp-sync-buttons">
         <Typography variant="subtitle2" mb={1}>Sincronizare manuală:</Typography>
         <ButtonGroup variant="outlined" size="small">
           <Button

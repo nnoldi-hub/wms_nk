@@ -63,7 +63,7 @@ const createZoneSchema = Joi.object({
 
 // Location Type schemas
 const createLocationTypeSchema = Joi.object({
-  code: Joi.string().alphanum().min(1).max(50).required(),
+  code: Joi.string().pattern(/^[A-Z0-9_]+$/i).min(1).max(50).required(),
   name: Joi.string().min(2).max(100).required(),
   capacity_type: Joi.string().max(50).optional(),
   default_width_cm: Joi.number().positive().optional(),
@@ -78,7 +78,7 @@ const createLocationTypeSchema = Joi.object({
 });
 
 const updateLocationTypeSchema = Joi.object({
-  code: Joi.string().alphanum().min(1).max(50).optional(),
+  code: Joi.string().pattern(/^[A-Z0-9_]+$/i).min(1).max(50).optional(),
   name: Joi.string().min(2).max(100).optional(),
   capacity_type: Joi.string().max(50).optional(),
   default_width_cm: Joi.number().positive().optional(),

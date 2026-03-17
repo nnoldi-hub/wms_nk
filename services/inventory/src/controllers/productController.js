@@ -10,9 +10,12 @@ exports.getAllProducts = async (req, res) => {
     let query = `
       SELECT p.*, 
         COUNT(*) OVER() as total_count,
-        COALESCE(SUM(ii.quantity), 0) as total_quantity
+        COALESCE(
+          (SELECT SUM(pb.current_quantity) FROM product_batches pb
+           WHERE pb.product_sku = p.sku AND pb.status NOT IN ('EMPTY','DAMAGED')),
+          0
+        ) as total_quantity
       FROM products p
-      LEFT JOIN inventory_items ii ON p.sku = ii.product_sku
     `;
     
     const params = [];
@@ -22,7 +25,7 @@ exports.getAllProducts = async (req, res) => {
       params.push(`%${search}%`);
     }
     
-    query += ` GROUP BY p.sku ORDER BY p.name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+    query += ` ORDER BY p.name LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
     params.push(limit, offset);
 
     const result = await req.db.query(query, params);
@@ -47,8 +50,12 @@ exports.getProductBySku = async (req, res) => {
     const { sku } = req.params;
 
     const result = await req.db.query(`
-      SELECT p.*, 
-        COALESCE(SUM(ii.quantity), 0) as total_quantity,
+      SELECT p.*,
+        COALESCE(
+          (SELECT SUM(pb.current_quantity) FROM product_batches pb
+           WHERE pb.product_sku = p.sku AND pb.status NOT IN ('EMPTY','DAMAGED')),
+          0
+        ) as total_quantity,
         json_agg(
           json_build_object(
             'location_id', l.id,

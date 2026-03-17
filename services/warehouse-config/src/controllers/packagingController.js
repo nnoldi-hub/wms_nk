@@ -11,7 +11,7 @@ class PackagingController {
       const { parsePagination } = require('../utils/pagination');
       const { page, limit, offset, sortBy, sortDir } = parsePagination(
         req.query,
-        ['category','packaging_name','packaging_code','created_at','updated_at'],
+        ['category','name','code','created_at','updated_at'],
         'category'
       );
 
@@ -46,12 +46,12 @@ class PackagingController {
       }
 
       if (q) {
-        query += ` AND (packaging_name ILIKE $${paramIndex} OR packaging_code ILIKE $${paramIndex})`;
+        query += ` AND (name ILIKE $${paramIndex} OR code ILIKE $${paramIndex})`;
         params.push(`%${q}%`);
         paramIndex++;
       }
 
-      query += ` ORDER BY ${sortBy} ${sortDir}, packaging_name LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
+      query += ` ORDER BY ${sortBy} ${sortDir}, name LIMIT $${paramIndex++} OFFSET $${paramIndex++}`;
       params.push(limit, offset);
 
       const wrapped = `SELECT sub.*, COUNT(*) OVER() AS total_count FROM (${query}) sub`;
@@ -101,25 +101,25 @@ class PackagingController {
 
       const result = await db.query(`
         INSERT INTO packaging_types (
-          id, packaging_code, packaging_name, category,
-          length_cm, width_cm, height_cm,
-          max_weight_kg, max_volume_cubic_meters,
+          id, code, name, category,
+          width_cm, depth_cm, height_cm,
+          max_product_weight_kg, max_product_volume_liters, max_product_length_meters,
           is_reusable, is_stackable, max_stack_height,
-          purchase_cost_per_unit, rental_cost_per_day,
+          cost_per_unit, rental_cost_per_day,
           is_active
         ) VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, true
+          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, true
         )
         RETURNING *
       `, [
-        id, data.packaging_code, data.packaging_name, data.category,
-        data.length_cm, data.width_cm, data.height_cm,
-        data.max_weight_kg, data.max_volume_cubic_meters,
-        data.is_reusable, data.is_stackable, data.max_stack_height,
-        data.purchase_cost_per_unit, data.rental_cost_per_day
+        id, data.code, data.name, data.category,
+        data.width_cm, data.depth_cm, data.height_cm,
+        data.max_product_weight_kg, data.max_product_volume_liters, data.max_product_length_meters,
+        data.is_reusable ?? false, data.is_stackable ?? false, data.max_stack_height ?? 1,
+        data.cost_per_unit, data.rental_cost_per_day
       ]);
 
-      logger.info(`Packaging type created: ${data.packaging_code} by user ${req.user.id}`);
+      logger.info(`Packaging type created: ${data.code} by user ${req.user.id}`);
       await cache.invalidatePrefix(cache.prefixes.packagingTypes);
       res.status(201).json({
         success: true,
@@ -196,8 +196,8 @@ class PackagingController {
       let query = `
         SELECT 
           pi.*,
-          pt.packaging_name,
-          pt.packaging_code,
+          pt.name AS packaging_name,
+          pt.code AS packaging_code,
           l.location_code,
           wz.zone_name
         FROM package_instances pi
@@ -316,8 +316,8 @@ class PackagingController {
       const result = await db.query(`
         SELECT 
           pt.id,
-          pt.packaging_code,
-          pt.packaging_name,
+          pt.code,
+          pt.name,
           pt.category,
           COUNT(pi.id) as total_units,
           COUNT(pi.id) FILTER (WHERE pi.status = 'AVAILABLE') as available_units,
@@ -327,8 +327,8 @@ class PackagingController {
         FROM packaging_types pt
         LEFT JOIN package_instances pi ON pt.id = pi.packaging_type_id
         WHERE pt.is_active = true
-        GROUP BY pt.id, pt.packaging_code, pt.packaging_name, pt.category
-        ORDER BY pt.category, pt.packaging_name
+        GROUP BY pt.id, pt.code, pt.name, pt.category
+        ORDER BY pt.category, pt.name
       `);
 
       res.json({

@@ -657,6 +657,8 @@ services:
       # Frontend env variable consumed by api client
       VITE_API_URL: http://localhost:3010
       VITE_WS_URL: ws://localhost:3017
+      VITE_WAREHOUSE_CONFIG_URL: http://localhost:3020
+      VITE_WAREHOUSE_CONFIG_WS_URL: ws://localhost:3020/ws
     ports:
       - "5173:5173"
     volumes:

@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 /**
  * syncService.js — Sincronizare periodica WMS <-> Pluriva ERP (Faza 7)
  *
@@ -127,12 +127,20 @@ async function syncOutboundNIRs() {
     const result = await db.query(`
       SELECT
         gr.id,
-        gr.po_id,
-        gr.confirmation_date,
-        gr.lines_json,
-        pm.erp_po_id
+        gr.supplier_order_id,
+        gr.receipt_date,
+        pm.erp_po_id,
+        COALESCE(
+          (SELECT json_agg(json_build_object(
+            'material', grl.material_name,
+            'sku', grl.product_sku,
+            'qty', grl.cant_received,
+            'unit', grl.unit
+          )) FROM goods_receipt_lines grl WHERE grl.receipt_id = gr.id),
+          '[]'::json
+        ) AS lines_json
       FROM goods_receipts gr
-      JOIN erp_po_mappings pm ON pm.erp_po_id = gr.erp_po_id
+      JOIN erp_po_mappings pm ON pm.wms_order_id = gr.supplier_order_id
       WHERE gr.erp_synced = FALSE
         AND gr.status = 'CONFIRMED'
       LIMIT 50
@@ -142,9 +150,9 @@ async function syncOutboundNIRs() {
       try {
         const erpResponse = await pluriva.confirmReceipt({
           erp_po_id:     row.erp_po_id,
-          received_date: row.confirmation_date,
+          received_date: row.receipt_date,
           wms_receipt_id: row.id,
-          lines: JSON.parse(row.lines_json || '[]'),
+          lines: Array.isArray(row.lines_json) ? row.lines_json : [],
         });
 
         await db.query(
@@ -182,10 +190,11 @@ async function syncOutboundDeliveries() {
         s.lines_json,
         o.erp_order_id
       FROM shipments s
-      JOIN orders o ON o.id = s.order_id
+      JOIN sales_orders o ON o.id = s.order_id
       WHERE s.erp_synced = FALSE
         AND s.status = 'DELIVERED'
         AND o.erp_order_id IS NOT NULL
+        AND o.erp_order_id <> ''
       LIMIT 50
     `);
 

@@ -23,7 +23,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Remove test user created during register test
+  // Delete audit_logs first (FK constraint), then test user
+  await db.query(
+    'DELETE FROM audit_logs WHERE user_id = (SELECT id FROM users WHERE username = $1)',
+    [TEST_USER.username]
+  ).catch(() => {});
   await db.query('DELETE FROM users WHERE username = $1', [TEST_USER.username]);
 });
 

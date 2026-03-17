@@ -7,17 +7,19 @@ process.env.JWT_SECRET = process.env.JWT_SECRET || 'wms_jwt_secret_key_2025';
 
 const request = require('supertest');
 const { app, pool } = require('../src/index');
-const { getToken } = require('./helpers');
+const { getToken, setupTestUser, cleanupTestUser } = require('./helpers');
 
 const adminToken = getToken('admin');
 const testLocationId = `TEST-LOC-${Date.now()}`;
 
 beforeAll(async () => {
   await pool.query('SELECT 1');
+  await setupTestUser(pool);
 });
 
 afterAll(async () => {
   await pool.query('DELETE FROM locations WHERE id = $1', [testLocationId]);
+  await cleanupTestUser(pool);
 });
 
 describe('GET /api/v1/locations', () => {

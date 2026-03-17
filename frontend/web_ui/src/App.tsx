@@ -26,6 +26,7 @@ import ReceptieMarfaPage from './pages/ReceptieMarfaPage';
 import ComenziFurnizorPage from './pages/ComenziFurnizorPage';
 import ReceptieNIRPage from './pages/ReceptieNIRPage';
 import PutawayTasksPage from './pages/PutawayTasksPage';
+import PalletsPage from './pages/PalletsPage';
 import PickNotesPage from './pages/PickNotesPage';
 import LivrarePage from './pages/LivrarePage';
 import BatchLabelsPage from './pages/BatchLabelsPage';
@@ -36,6 +37,9 @@ import PredictionsPage from './pages/PredictionsPage';
 import RulesValidationPage from './pages/RulesValidationPage';
 import ConfigValidatorPage from './pages/ConfigValidatorPage';
 import LocationCapacitiesPage from './pages/LocationCapacitiesPage';
+import LocationTypesPage from './pages/LocationTypesPage';
+import PackagingTypesPage from './pages/PackagingTypesPage';
+import PutawayRulesPage from './pages/PutawayRulesPage';
 import WarehouseSetupWizardPage from './pages/WarehouseSetupWizardPage';
 import WarehouseTemplatesPage from './pages/WarehouseTemplatesPage';
 import SimulatorPage from './pages/SimulatorPage';
@@ -43,6 +47,8 @@ import DynamicRulesPage from './pages/DynamicRulesPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import StockAlertsPage from './pages/StockAlertsPage';
 import ERPIntegrationPage from './pages/ERPIntegrationPage';
+import { TutorialProvider } from './contexts/TutorialContext';
+import TutorialOverlay from './components/TutorialOverlay';
 import theme from './theme';
 
 function App() {
@@ -51,6 +57,8 @@ function App() {
       <CssBaseline />
       <AuthProvider>
         <BrowserRouter>
+          <TutorialProvider>
+            <TutorialOverlay />
           <Routes>
             <Route path="/login" element={<LoginPage />} />
             <Route
@@ -264,6 +272,16 @@ function App() {
               }
             />
             <Route
+              path="/pallets"
+              element={
+                <ProtectedRoute roles={['admin','manager','operator']}>
+                  <Layout>
+                    <PalletsPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/note-culegere"
               element={
                 <ProtectedRoute roles={['admin','manager','operator']}>
@@ -364,6 +382,36 @@ function App() {
               }
             />
             <Route
+              path="/tipuri-locatii"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <LocationTypesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/tipuri-ambalaje"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <PackagingTypesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/reguli-putaway"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <PutawayRulesPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
               path="/wizard-configurare"
               element={
                 <ProtectedRoute roles={['admin','manager']}>
@@ -435,6 +483,7 @@ function App() {
             />
             <Route path="/" element={<Navigate to="/dashboard" replace />} />
           </Routes>
+          </TutorialProvider>
         </BrowserRouter>
       </AuthProvider>
     </ThemeProvider>

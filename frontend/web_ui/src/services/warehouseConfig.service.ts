@@ -157,6 +157,20 @@ export const warehouseConfigService = {
     return data;
   },
 
+  // --- Packaging Types ---
+  async listPackagingTypes(params?: Record<string, unknown>) {
+    const { data } = await wcClient.get('/api/v1/packaging/types', { params });
+    return data;
+  },
+  async createPackagingType(payload: { code: string; name: string; [key: string]: unknown }) {
+    const { data } = await wcClient.post('/api/v1/packaging/types', payload);
+    return data;
+  },
+  async updatePackagingType(id: string, payload: Record<string, unknown>) {
+    const { data } = await wcClient.put(`/api/v1/packaging/types/${id}`, payload);
+    return data;
+  },
+
   // --- WMS Rules (Rule Engine) ---
   async listRules(params?: { scope?: string; is_active?: boolean }) {
     const { data } = await wcClient.get('/api/v1/rules', { params });
@@ -303,6 +317,32 @@ export const warehouseConfigService = {
     extra_info?: Record<string, unknown>;
   }) {
     const { data } = await wcClient.post('/api/v1/audit/ui-event', payload);
+    return data;
+  },
+
+  // --- Putaway Rules ---
+  async listPutawayRules() {
+    const { data } = await wcClient.get('/api/v1/putaway-rules');
+    return data;
+  },
+  async createPutawayRule(payload: { packaging_type_code: string; location_type_code: string; priority: number; notes?: string }) {
+    const { data } = await wcClient.post('/api/v1/putaway-rules', payload);
+    return data;
+  },
+  async updatePutawayRule(id: string, payload: { priority?: number; notes?: string }) {
+    const { data } = await wcClient.put(`/api/v1/putaway-rules/${id}`, payload);
+    return data;
+  },
+  async deletePutawayRule(id: string) {
+    const { data } = await wcClient.delete(`/api/v1/putaway-rules/${id}`);
+    return data;
+  },
+  async bulkSavePutawayRules(packaging_type_code: string, rules: Array<{ location_type_code: string; priority: number; notes?: string }>) {
+    const { data } = await wcClient.post('/api/v1/putaway-rules/bulk', { packaging_type_code, rules });
+    return data;
+  },
+  async suggestPutawayLocations(packaging_type_code: string) {
+    const { data } = await wcClient.get('/api/v1/putaway-rules/suggest', { params: { packaging_type_code } });
     return data;
   },
 };

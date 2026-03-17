@@ -31,7 +31,7 @@
 
 WMS-NKS este un sistem de management al depozitului construit complet pe microservicii, destinat operațiunilor cu cabluri electrice, echipamente și materiale de sewing/croitorie industrială. Sistemul acoperă întregul flux: recepție marfă → putaway inteligent → picking → expediere, cu integrare ERP, trasabilitate completă pe loturi și audit trail detaliat.
 
-**Stare curentă:** Faze 1–4, 6, 7 complet implementate. Faza 5 (multi-depozit) în roadmap.
+**Stare curentă:** Faze 1–4, 6, 7 complet implementate + Sprint Putaway/Paleți (S1–S4) finalizat. 57/57 teste verzi. Faza 5 (multi-depozit) în roadmap.
 
 ---
 
@@ -85,6 +85,21 @@ WMS-NKS este un sistem de management al depozitului construit complet pe microse
 | **Webhooks** | `PO_CONFIRMED`, `PO_CANCELLED`, `INVOICE_CREATED` cu HMAC-SHA256 |
 | **Dashboard** | Status ERP, PO-uri, istoric joburi, webhook log (`/erp-integrare`) |
 
+### Sprint Putaway & Paleți ✅ *(2026-03)*
+| Modul | Detalii |
+|---|---|
+| **Tipuri Locații** | CRUD complet tipuri locații, cod unic, capacitate, compatibilitate ambalaje (`/tipuri-locatii`) |
+| **Tipuri Ambalaje** | CRUD tipuri ambalaje (COLAC, TAMBUR, CUTIE…), categorii, greutate, volum (`/tipuri-ambalaje`) |
+| **Reguli Putaway** | Matrice packaging × location → prioritate; seed reguli implicite depozit cabluri (`/reguli-putaway`) |
+| **Sistem Paleți** | Paleți fizici cu cod PAL-YYYY-NNN, QR code SVG, tracking locație, bulk putaway, configurare produse/palet (`/paleti`) |
+| **PENDING_PUTAWAY** | Status nou în `product_batches` → flux NIR → task putaway → confirmare locație |
+| **Sugestie locație automată** | Backend calculează locația optimă din reguli putaway la confirmare task |
+| **Sync inventar** | Trigger SQL (migrare 042) + backfill 177 rânduri: `product_batches` → `inventory_items` |
+| **Tutorial interactiv** | `TutorialOverlay` + `TutorialContext` + 4 tutoriale (receptie, putaway, picking, configurare) |
+| **Import PO din PDF** | Utilitar `parsePdfPurchaseOrder.ts` pentru extragere date din PDF-uri comenzi furnizor |
+| **Hartă stoc vizual** | `viewMode=Stock` pe harta depozit — colorare locații după grad de ocupare |
+| **Dashboard îmbunătățit** | Widget-uri Resturi + Stoc per Zonă integrate în dashboard principal |
+
 ---
 
 ## Arhitectură
@@ -123,7 +138,7 @@ WMS-NKS este un sistem de management al depozitului construit complet pe microse
 | Serviciu | Port | Responsabilitate |
 |---|---|---|
 | `auth` | 3010 | Autentificare JWT, utilizatori, permisiuni |
-| `inventory` | 3011 | Stoc, loturi, locații, receptie, picking |
+| `inventory` | 3011 | Stoc, loturi, locații, receptie, picking, **paleți** |
 | `scanner-service` | 3012 | Scanare coduri de bare / QR |
 | `cutting-service` | 3013 | Ordine tăiere cabluri |
 | `sewing-service` | 3014 | Ordine de producție sewing |
@@ -131,7 +146,7 @@ WMS-NKS este un sistem de management al depozitului construit complet pe microse
 | `shipments-service` | 3016 | Expedieri și livrări |
 | `notifications-service` | 3017 | WebSocket, alerte real-time |
 | `erp-connector` | 3018 | Integrare ERP Pluriva |
-| `warehouse-config` | 3020 | Configurare depozit, reguli, audit ops |
+| `warehouse-config` | 3020 | Configurare depozit, tipuri locații/ambalaje, **reguli putaway**, audit ops |
 
 ---
 
@@ -294,12 +309,13 @@ wms-nks/
 ├── frontend/
 │   └── web_ui/
 │       └── src/
-│           ├── pages/               # ~40 pagini React
+│           ├── pages/               # 43 pagini React
 │           │   ├── DashboardPage.tsx
 │           │   ├── InventoryMovementsPage.tsx
 │           │   ├── OrdersPage.tsx
 │           │   ├── PickJobsPage.tsx
 │           │   ├── ReceptieMarfaPage.tsx
+│           │   ├── ReceptieNIRPage.tsx
 │           │   ├── ShipmentsPage.tsx
 │           │   ├── ActivityLogPage.tsx
 │           │   ├── ConfigValidatorPage.tsx
@@ -307,21 +323,32 @@ wms-nks/
 │           │   ├── SimulatorPage.tsx
 │           │   ├── ERPIntegrationPage.tsx
 │           │   ├── StockAlertsPage.tsx
+│           │   ├── LocationTypesPage.tsx    # ← NOU
+│           │   ├── PackagingTypesPage.tsx   # ← NOU
+│           │   ├── PalletsPage.tsx          # ← NOU
+│           │   ├── PutawayRulesPage.tsx     # ← NOU
 │           │   └── ...
 │           ├── components/          # Componente reutilizabile
 │           │   ├── Layout.tsx       # Sidebar + AppBar
 │           │   ├── PermissionGuard.tsx
 │           │   ├── PermissionsDialog.tsx
-│           │   └── NotificationBell.tsx
+│           │   ├── NotificationBell.tsx
+│           │   └── TutorialOverlay.tsx      # ← NOU
+│           ├── contexts/
+│           │   └── TutorialContext.tsx      # ← NOU
 │           ├── hooks/               # Hook-uri custom
 │           │   ├── usePermissions.ts
 │           │   ├── useActivityLog.ts
-│           │   └── useWebSocket.ts
+│           │   ├── useWebSocket.ts
+│           │   └── useTutorial.ts           # ← NOU
+│           ├── utils/
+│           │   ├── parsePdfPurchaseOrder.ts # ← NOU
+│           │   └── tutorials.ts             # ← NOU
 │           └── services/
 │               └── warehouseConfig.service.ts
 │
 ├── database/
-│   └── migrations/                  # 036+ migrări SQL secvențiale
+│   └── migrations/                  # 042 migrări SQL (006a → 042)
 │
 ├── docker/
 │   ├── init-scripts/                # Inițializare DB
@@ -389,11 +416,33 @@ GET  /api/v1/validate/setup-check  # Validator configurare depozit (scor 0-100)
 ### Inventar & Receptie
 
 ```bash
-GET  /api/v1/inventory/items    # Stoc curent
-POST /api/v1/inventory/receive  # Receptie marfă
-GET  /api/v1/picking/jobs       # Joburi picking
-GET  /api/v1/locations          # Locații depozit
+GET  /api/v1/inventory/items          # Stoc curent
+POST /api/v1/inventory/receive        # Receptie marfă
+GET  /api/v1/picking/jobs             # Joburi picking
+GET  /api/v1/locations                # Locații depozit
 PATCH /api/v1/locations/:id/capacity  # Capacitate locație
+```
+
+### Paleți
+
+```bash
+GET  /api/v1/pallets                  # Lista paleți
+POST /api/v1/pallets                  # Creare palet (generează cod PAL-YYYY-NNN)
+PATCH /api/v1/pallets/:id/location    # Asignare locație
+GET  /api/v1/pallets/:id/qr           # QR code palet
+GET  /api/v1/pallet-product-config    # Configurare produse/palet
+```
+
+### Configurare Putaway
+
+```bash
+GET  /api/v1/warehouse-config/location-types      # Tipuri locații
+POST /api/v1/warehouse-config/location-types      # Creare tip locație
+GET  /api/v1/warehouse-config/packaging-types     # Tipuri ambalaje
+POST /api/v1/warehouse-config/packaging-types     # Creare tip ambalaj
+GET  /api/v1/warehouse-config/putaway-rules       # Reguli putaway
+POST /api/v1/warehouse-config/putaway-rules       # Creare regulă
+DELETE /api/v1/warehouse-config/putaway-rules/:id # Ștergere regulă
 ```
 
 ---

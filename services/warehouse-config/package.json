@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "nodemon src/index.js",
     "start": "node src/index.js",
-    "test": "jest",
+    "test": "jest --runInBand",
     "lint": "eslint src/",
     "migrate": "node -r dotenv/config scripts/migrate.js",
     "migrate:down": "node -r dotenv/config scripts/migrate.js --down",

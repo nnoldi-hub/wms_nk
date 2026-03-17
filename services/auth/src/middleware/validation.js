@@ -21,13 +21,13 @@ const validateRequest = (schema) => {
 };
 
 const loginSchema = Joi.object({
-  username: Joi.string().alphanum().min(3).max(30).required(),
-  password: Joi.string().min(6).required()
+  username: Joi.string().pattern(/^[a-zA-Z0-9_]+$/).min(3).max(30).required(),
+  password: Joi.string().min(1).required()
 });
 
 const registerSchema = Joi.object({
-  username: Joi.string().alphanum().min(3).max(30).required(),
-  email: Joi.string().email().required(),
+  username: Joi.string().pattern(/^[a-zA-Z0-9_]+$/).min(3).max(30).required(),
+  email: Joi.string().email({ tlds: { allow: false } }).required(),
   password: Joi.string().min(6).required(),
   role: Joi.string().valid('admin', 'manager', 'operator', 'scanner').default('operator')
 });

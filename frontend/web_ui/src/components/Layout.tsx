@@ -1,4 +1,4 @@
-import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, AppBar, IconButton, Typography, Avatar, Menu, MenuItem, ListSubheader, Divider, Collapse } from '@mui/material';
+import { Box, Drawer, List, ListItem, ListItemButton, ListItemIcon, ListItemText, Toolbar, AppBar, IconButton, Typography, Avatar, Menu, MenuItem, ListSubheader, Divider, Collapse, Tooltip } from '@mui/material';
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import DashboardIcon from '@mui/icons-material/Dashboard';
@@ -28,16 +28,22 @@ import DirectionsCarIcon from '@mui/icons-material/DirectionsCar';
 import TrendingUpIcon from '@mui/icons-material/TrendingUp';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import StorageIcon from '@mui/icons-material/Storage';
+import CategoryIcon from '@mui/icons-material/Category';
+import Inventory2Icon from '@mui/icons-material/Inventory2';
 import SpeedIcon from '@mui/icons-material/Speed';
 import AutoGraphIcon from '@mui/icons-material/AutoGraph';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import ScienceIcon from '@mui/icons-material/Science';
 import DynamicFeedIcon from '@mui/icons-material/DynamicFeed';
+import PalletIcon from '@mui/icons-material/Inventory2';
 import ManageHistoryIcon from '@mui/icons-material/ManageHistory';
 import NotificationsActiveIcon from '@mui/icons-material/NotificationsActive';
 import SyncAltIcon from '@mui/icons-material/SyncAlt';
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline';
+import CallSplitIcon from '@mui/icons-material/CallSplit';
 import { useAuth } from '../hooks/useAuth';
 import NotificationBell from './NotificationBell';
+import { useTutorial } from '../hooks/useTutorial';
 
 const drawerWidth = 260;
 
@@ -61,7 +67,10 @@ const menuGroups: MenuGroupDef[] = [
       { text: 'Configurare Depozit', icon: <WarehouseIcon />, path: '/warehouse-config', roles: ['admin', 'manager'] },
       { text: 'Validare Configuratie', icon: <VerifiedIcon />, path: '/validare-configuratie', roles: ['admin', 'manager'] },
       { text: 'Validator Setup (3.2)', icon: <VerifiedIcon />, path: '/validator-configurare', roles: ['admin', 'manager'] },
-      { text: 'Capacitati Locatii', icon: <StorageIcon />, path: '/capacitati-locatii', roles: ['admin', 'manager'] },
+      { text: 'Tipuri Locații', icon: <CategoryIcon />, path: '/tipuri-locatii', roles: ['admin', 'manager'] },
+      { text: 'Tipuri Ambalaje', icon: <Inventory2Icon />, path: '/tipuri-ambalaje', roles: ['admin', 'manager'] },
+      { text: 'Reguli Depozitare', icon: <CallSplitIcon />, path: '/reguli-putaway', roles: ['admin', 'manager'] },
+      { text: 'Capacități Locații', icon: <StorageIcon />, path: '/capacitati-locatii', roles: ['admin', 'manager'] },
       { text: 'Wizard Configurare', icon: <SettingsApplicationsIcon />, path: '/wizard-configurare', roles: ['admin', 'manager'] },
       { text: 'Template-uri Depozit', icon: <WarehouseIcon />, path: '/template-depozit', roles: ['admin', 'manager'] },
       { text: 'Simulator WMS', icon: <ScienceIcon />, path: '/simulator-wms', roles: ['admin', 'manager'] },
@@ -81,23 +90,24 @@ const menuGroups: MenuGroupDef[] = [
     roles: ['admin', 'manager', 'operator'],
     items: [
       { text: 'Comenzi Furnizor', icon: <ShoppingCartIcon />, path: '/comenzi-furnizor', roles: ['admin', 'manager'] },
-      { text: 'NIR Recepție', icon: <ReceiptLongIcon />, path: '/receptie-nir', roles: ['admin', 'manager', 'operator'] },
-      { text: 'Putaway Tasks', icon: <MoveDownIcon />, path: '/putaway-tasks', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Recepție NIR', icon: <ReceiptLongIcon />, path: '/receptie-nir', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Sarcini Depozitare', icon: <MoveDownIcon />, path: '/putaway-tasks', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Paleți', icon: <PalletIcon />, path: '/pallets', roles: ['admin', 'manager', 'operator'] },
       { text: 'Produse', icon: <InventoryIcon />, path: '/products', roles: ['admin', 'manager', 'operator'] },
       { text: 'Recepție Marfă', icon: <MoveToInboxIcon />, path: '/receptie', roles: ['admin', 'manager', 'operator'] },
-      { text: 'Comenzi', icon: <ChecklistIcon />, path: '/orders', roles: ['admin', 'manager', 'operator'] },
-      { text: 'Picking', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Comenzi Clienți', icon: <ChecklistIcon />, path: '/orders', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Culegere', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs', roles: ['admin', 'manager', 'operator'] },
       { text: 'Note de Culegere', icon: <AssignmentIcon />, path: '/note-culegere', roles: ['admin', 'manager', 'operator'] },
       { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments', roles: ['admin', 'manager', 'operator'] },
       { text: 'Livrare Șofer', icon: <DirectionsCarIcon />, path: '/livrare', roles: ['admin', 'manager', 'operator'] },
       // Opțiuni suplimentare (rămân vizibile, dar grupate)
-      { text: 'Batches', icon: <ViewModuleIcon />, path: '/batches', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Loturi', icon: <ViewModuleIcon />, path: '/batches', roles: ['admin', 'manager', 'operator'] },
       { text: 'Transformări', icon: <TransformIcon />, path: '/transformations', roles: ['admin', 'manager', 'operator'] },
       { text: 'Scanare', icon: <QrCodeScannerIcon />, path: '/scan', roles: ['admin', 'manager', 'operator'] },
     ],
   },
   {
-    title: 'Rapoarte & Analiță',
+    title: 'Rapoarte & Analiză',
     roles: ['admin', 'manager'],
     items: [
       { text: 'Mișcări inventar', icon: <SwapHorizIcon />, path: '/rapoarte-miscari', roles: ['admin', 'manager'] },
@@ -122,6 +132,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout } = useAuth();
+  const { openDrawer } = useTutorial();
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -251,6 +262,11 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             }
           </Typography>
           <NotificationBell />
+          <Tooltip title="Tutoriale & Ghid">
+            <IconButton color="inherit" onClick={openDrawer} sx={{ ml: 0.5 }}>
+              <HelpOutlineIcon />
+            </IconButton>
+          </Tooltip>
           <IconButton onClick={handleMenuOpen}>
             <Avatar sx={{ bgcolor: '#1976d2' }}>
               {user?.username?.charAt(0).toUpperCase()}

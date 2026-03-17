@@ -1,5 +1,5 @@
 const request = require('supertest');
-const app = require('../src/index');
+const { app, pool } = require('../src/index');
 
 describe('GET /metrics', () => {
   it('returns Prometheus metrics in text format', async () => {

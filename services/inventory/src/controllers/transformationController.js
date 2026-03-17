@@ -110,6 +110,16 @@ class TransformationController {
         throw new AppError('Missing required fields: type, source_batch_id, source_quantity', 400);
       }
 
+      // Load source batch before modifying (needed for REST lot creation)
+      const sourceBatchRes = await client.query(
+        'SELECT product_sku, unit_id, current_quantity FROM product_batches WHERE id = $1 FOR UPDATE',
+        [source_batch_id]
+      );
+      if (sourceBatchRes.rows.length === 0) {
+        throw new AppError('Source batch not found', 404);
+      }
+      const sourceBatch = sourceBatchRes.rows[0];
+
       // Create transformation record
       const transformationResult = await client.query(`
         INSERT INTO product_transformations
@@ -154,10 +164,34 @@ class TransformationController {
         `, [transformation.id, source_batch_id, result_batch_id]);
       }
 
+      // Auto-create REST lot if cut type and there's remaining quantity
+      let restBatch = null;
+      if (type === 'CUT') {
+        const restQty = parseFloat(sourceBatch.current_quantity) - parseFloat(source_quantity);
+        if (restQty > 0) {
+          const restRes = await client.query(`
+            INSERT INTO product_batches
+              (product_sku, unit_id, initial_quantity, current_quantity,
+               status, source_batch_id, transformation_id, notes)
+            VALUES ($1, $2, $3, $3, 'PENDING_PUTAWAY', $4, $5, $6)
+            RETURNING *
+          `, [
+            sourceBatch.product_sku,
+            sourceBatch.unit_id,
+            restQty,
+            source_batch_id,
+            transformation.id,
+            `Rest după tăiere din lotul ${source_batch_id}`
+          ]);
+          restBatch = restRes.rows[0];
+          logger.info(`REST batch created: ${restBatch.batch_number} (${restQty} units) → PENDING_PUTAWAY`);
+        }
+      }
+
       await client.query('COMMIT');
 
       logger.info(`Transformation created: ${transformation.transformation_number}`);
-      res.status(201).json({ success: true, data: transformation });
+      res.status(201).json({ success: true, data: transformation, rest_batch: restBatch || undefined });
     } catch (error) {
       await client.query('ROLLBACK');
       logger.error('Error creating transformation:', error);

@@ -14,6 +14,7 @@ import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import WarningAmberIcon from '@mui/icons-material/WarningAmber';
+import ContentCutIcon from '@mui/icons-material/ContentCut';
 
 const API = 'http://localhost:3011/api/v1';
 
@@ -50,6 +51,12 @@ interface SalesOrder {
   status?: string;
 }
 
+interface ZoneStock {
+  zone: string;
+  batch_count: number;
+  total_qty: number;
+}
+
 export const DashboardPage = () => {
   const navigate = useNavigate();
   const token = localStorage.getItem('accessToken');
@@ -58,23 +65,36 @@ export const DashboardPage = () => {
   const [pos, setPos] = useState<POSummary[]>([]);
   const [pendingPutaway, setPendingPutaway] = useState<PendingBatch[]>([]);
   const [overdueOrders, setOverdueOrders] = useState<SalesOrder[]>([]);
+  const [resturiCount, setResturiCount] = useState(0);
+  const [resturiQty, setResturiQty] = useState(0);
+  const [zoneStock, setZoneStock] = useState<ZoneStock[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     const load = async () => {
       try {
-        const [poRes, paRes, overdueRes] = await Promise.all([
+        const [poRes, paRes, overdueRes, statsRes] = await Promise.all([
           fetch(`${API}/purchase-orders`, { headers: hdrs }),
           fetch(`${API}/batches/pending-putaway`, { headers: hdrs }),
           fetch(`${API}/orders?overdue=true&limit=10`, { headers: hdrs }),
+          fetch(`${API}/batches/dashboard-stats`, { headers: hdrs }),
         ]);
         const poJ = await poRes.json() as { success: boolean; data?: POSummary[] };
         const paJ = await paRes.json() as { success: boolean; data?: PendingBatch[] };
         const ovJ = await overdueRes.json() as { success: boolean; data?: SalesOrder[] };
+        const stJ = await statsRes.json() as {
+          success: boolean;
+          data?: { resturi_count: number; resturi_total_qty: number; stock_by_zone: ZoneStock[] };
+        };
         if (poJ.success) setPos(poJ.data || []);
         if (paJ.success) setPendingPutaway(paJ.data || []);
         if (ovJ.success) setOverdueOrders(ovJ.data || []);
+        if (stJ.success && stJ.data) {
+          setResturiCount(stJ.data.resturi_count);
+          setResturiQty(stJ.data.resturi_total_qty);
+          setZoneStock(stJ.data.stock_by_zone || []);
+        }
       } catch (e) {
         setError('Nu s-au putut încărca datele dashboard. Verifică că serviciile sunt pornite.');
         console.error(e);
@@ -140,6 +160,15 @@ export const DashboardPage = () => {
       color: overdueCount > 0 ? '#b71c1c' : '#388e3c',
       path: '/orders',
       urgent: overdueCount > 0,
+    },
+    {
+      title: 'Resturi Disponibile',
+      value: resturiCount,
+      subtitle: resturiCount > 0 ? `${Math.round(resturiQty).toLocaleString('ro-RO')} m total` : 'niciun rest activ',
+      icon: <ContentCutIcon fontSize="large" />,
+      color: resturiCount > 0 ? '#7b1fa2' : '#388e3c',
+      path: '/batches',
+      urgent: false,
     },
   ];
 
@@ -345,6 +374,42 @@ export const DashboardPage = () => {
                 </Box>
               )}
             </Paper>
+          </Grid>
+        )}
+
+        {/* Stoc per Zonă (S4.4) */}
+        {zoneStock.length > 0 && (
+          <Grid size={{ xs: 12, md: 5 }}>
+            <Box display="flex" justifyContent="space-between" alignItems="center" mb={1}>
+              <Typography variant="h6">Stoc per Zonă</Typography>
+              <Button size="small" endIcon={<ArrowForwardIcon />} onClick={() => navigate('/harta-depozit')}>
+                Hartă
+              </Button>
+            </Box>
+            <TableContainer component={Paper} variant="outlined">
+              <Table size="small">
+                <TableHead>
+                  <TableRow sx={{ bgcolor: 'grey.50' }}>
+                    <TableCell sx={{ fontWeight: 700 }}>Zonă</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }} align="right">Loturi</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }} align="right">Cantitate (m)</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {zoneStock.map(z => (
+                    <TableRow key={z.zone} hover>
+                      <TableCell sx={{ fontFamily: 'monospace', fontWeight: 600 }}>{z.zone}</TableCell>
+                      <TableCell align="right">
+                        <Chip label={z.batch_count} size="small" variant="outlined" />
+                      </TableCell>
+                      <TableCell align="right" sx={{ fontWeight: 700 }}>
+                        {Number(z.total_qty).toLocaleString('ro-RO')}
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Grid>
         )}
 
