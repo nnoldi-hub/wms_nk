@@ -262,6 +262,13 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
             }
           </Typography>
           <NotificationBell />
+          {(user?.role === 'admin' || user?.role === 'manager') && (
+            <Tooltip title="Mod Operator (scanner)">
+              <IconButton color="inherit" onClick={() => navigate('/scanner-mode')} sx={{ ml: 0.5 }}>
+                <QrCodeScannerIcon />
+              </IconButton>
+            </Tooltip>
+          )}
           <Tooltip title="Tutoriale & Ghid">
             <IconButton color="inherit" onClick={openDrawer} sx={{ ml: 0.5 }}>
               <HelpOutlineIcon />

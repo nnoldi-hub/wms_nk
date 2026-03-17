@@ -27,7 +27,22 @@ export const LoginPage = () => {
 
     try {
       await login(username, password);
-      navigate('/dashboard');
+      // Redirect based on role: operators go to scanner mode
+      const storedUser = JSON.parse(localStorage.getItem('wms_user') || 'null');
+      // role is set in AuthContext after login — read from response by checking token payload
+      const token = localStorage.getItem('accessToken');
+      let role = 'admin';
+      if (token) {
+        try {
+          const payload = JSON.parse(atob(token.split('.')[1]));
+          role = payload.role || 'admin';
+        } catch { /* ignore */ }
+      }
+      if (role === 'operator') {
+        navigate('/scanner-mode');
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err) {
       const error = err as { response?: { data?: { message?: string } } };
       setError(error.response?.data?.message || 'Login failed. Please try again.');

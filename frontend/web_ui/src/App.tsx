@@ -49,6 +49,7 @@ import StockAlertsPage from './pages/StockAlertsPage';
 import ERPIntegrationPage from './pages/ERPIntegrationPage';
 import { TutorialProvider } from './contexts/TutorialContext';
 import TutorialOverlay from './components/TutorialOverlay';
+import ScannerModePage from './pages/ScannerModePage';
 import theme from './theme';
 
 function App() {
@@ -478,6 +479,14 @@ function App() {
                   <Layout>
                     <ERPIntegrationPage />
                   </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scanner-mode"
+              element={
+                <ProtectedRoute roles={['operator','admin','manager']}>
+                  <ScannerModePage />
                 </ProtectedRoute>
               }
             />
