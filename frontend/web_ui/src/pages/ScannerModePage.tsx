@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Box, Typography, Button, IconButton, Tooltip } from '@mui/material';
+import { useState, useEffect } from 'react';
+import { Box, Typography, Button, IconButton, Tooltip, Badge } from '@mui/material';
 import LogoutIcon from '@mui/icons-material/Logout';
 import VolumeUpIcon from '@mui/icons-material/VolumeUp';
 import VolumeOffIcon from '@mui/icons-material/VolumeOff';
@@ -7,6 +7,7 @@ import OpenInNewIcon from '@mui/icons-material/OpenInNew';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useScannerFeedback } from '../hooks/useScannerFeedback';
+import { useNotifications } from '../hooks/useNotifications';
 import ReceptieWorkflow from '../components/scanner/workflows/ReceptieWorkflow';
 import PutawayWorkflow from '../components/scanner/workflows/PutawayWorkflow';
 import PickingWorkflow from '../components/scanner/workflows/PickingWorkflow';
@@ -23,19 +24,37 @@ interface HubAction {
   border: string;
 }
 
+const WORKFLOW_LABELS: Record<WorkflowType, string> = {
+  RECEPTIE: 'RECEPȚIE',
+  PUTAWAY:  'DEPOZITARE',
+  PICKING:  'CULEGERE',
+  LIVRARE:  'LIVRARE',
+};
+
 const ACTIONS: HubAction[] = [
-  { workflow: 'RECEPTIE', icon: '📥', label: 'RECEPȚIE',  color: 'rgba(21,101,192,0.35)',  border: '#1565c0' },
-  { workflow: 'PUTAWAY',  icon: '📦', label: 'PUTAWAY',   color: 'rgba(74,20,140,0.35)',   border: '#7b1fa2' },
-  { workflow: 'PICKING',  icon: '🛒', label: 'PICKING',   color: 'rgba(230,81,0,0.35)',    border: '#e65100' },
-  { workflow: 'LIVRARE',  icon: '🚚', label: 'LIVRARE',   color: 'rgba(1,87,46,0.35)',     border: '#00c853' },
+  { workflow: 'RECEPTIE', icon: '📥', label: 'RECEPȚIE',     color: 'rgba(21,101,192,0.35)',  border: '#1565c0' },
+  { workflow: 'PUTAWAY',  icon: '📦', label: 'DEPOZITARE',   color: 'rgba(74,20,140,0.35)',   border: '#7b1fa2' },
+  { workflow: 'PICKING',  icon: '🛒', label: 'CULEGERE',     color: 'rgba(230,81,0,0.35)',    border: '#e65100' },
+  { workflow: 'LIVRARE',  icon: '🚚', label: 'LIVRARE',      color: 'rgba(1,87,46,0.35)',     border: '#00c853' },
 ];
 
 export default function ScannerModePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { getSoundEnabled, setSoundEnabled } = useScannerFeedback();
+  const { getSoundEnabled, setSoundEnabled, feedbackOK } = useScannerFeedback();
   const [activeView, setActiveView] = useState<ActiveView>(null);
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
+  const { assignedJobCount, lastJobAssigned, clearLastJob } = useNotifications();
+  const [showJobBanner, setShowJobBanner] = useState(false);
+
+  // Arată banner fullscreen când vine un job nou
+  useEffect(() => {
+    if (lastJobAssigned) {
+      setShowJobBanner(true);
+      // Sunet alertă job nou (dacă sunetul e pornit)
+      if (getSoundEnabled()) feedbackOK();
+    }
+  }, [lastJobAssigned, getSoundEnabled, playFeedback]);
 
   const handleLogout = () => {
     logout();
@@ -86,7 +105,7 @@ export default function ScannerModePage() {
             </Button>
           )}
           <Typography sx={{ fontWeight: 700, fontSize: 16, color: activeView ? '#00e5ff' : '#fff' }}>
-            {activeView ?? 'WMS NK — Operator'}
+            {activeView ? WORKFLOW_LABELS[activeView] : 'WMS NK — Operator'}
           </Typography>
         </Box>
 
@@ -120,7 +139,51 @@ export default function ScannerModePage() {
 
       {/* ── CONTENT ────────────────────────────────────────── */}
       <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflowY: 'auto' }}>
-        {activeView === null && <HubScreen onSelect={setActiveView} />}
+        {activeView === null && <HubScreen onSelect={setActiveView} pickingBadge={assignedJobCount} />}
+        {showJobBanner && lastJobAssigned && (
+          <Box
+            sx={{
+              position: 'fixed', inset: 0, zIndex: 9999,
+              bgcolor: lastJobAssigned.priority === 'CRITIC' ? 'rgba(211,47,47,0.97)' : 'rgba(230,81,0,0.97)',
+              display: 'flex', flexDirection: 'column',
+              alignItems: 'center', justifyContent: 'center',
+              gap: 3, p: 4,
+              animation: lastJobAssigned.priority === 'CRITIC' ? 'pulse 1s infinite' : undefined,
+            }}
+          >
+            <Typography sx={{ fontSize: 60 }}>🔔</Typography>
+            <Typography sx={{ fontSize: 28, fontWeight: 900, color: '#fff', textAlign: 'center' }}>
+              JOB NOU ALOCAT!
+            </Typography>
+            {lastJobAssigned.orderRef && (
+              <Typography sx={{ fontSize: 18, color: '#ffe0b2', textAlign: 'center' }}>
+                Comandă: {lastJobAssigned.orderRef}
+              </Typography>
+            )}
+            {lastJobAssigned.priority !== 'NORMAL' && (
+              <Box sx={{
+                bgcolor: '#fff', color: '#b71c1c', px: 3, py: 1,
+                borderRadius: 2, fontWeight: 900, fontSize: 20,
+              }}>
+                ⚠️ PRIORITATE: {lastJobAssigned.priority}
+              </Box>
+            )}
+            <Button
+              variant="contained"
+              size="large"
+              onClick={() => { setShowJobBanner(false); clearLastJob(); setActiveView('PICKING'); }}
+              sx={{ mt: 2, bgcolor: '#fff', color: '#e65100', fontWeight: 900, fontSize: 18, px: 5, py: 1.5 }}
+            >
+              ACCEPTĂ
+            </Button>
+            <Button
+              onClick={() => { setShowJobBanner(false); clearLastJob(); }}
+              sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}
+            >
+              Ignoră momentan
+            </Button>
+          </Box>
+        )}
         {activeView === 'RECEPTIE' && <ReceptieWorkflow onBack={() => setActiveView(null)} />}
         {activeView === 'PUTAWAY'  && <PutawayWorkflow  onBack={() => setActiveView(null)} />}
         {activeView === 'PICKING'  && <PickingWorkflow  onBack={() => setActiveView(null)} />}
@@ -131,7 +194,7 @@ export default function ScannerModePage() {
 }
 
 // ── HUB SCREEN ──────────────────────────────────────────────
-function HubScreen({ onSelect }: { onSelect: (w: WorkflowType) => void }) {
+function HubScreen({ onSelect, pickingBadge = 0 }: { onSelect: (w: WorkflowType) => void; pickingBadge?: number }) {
   return (
     <Box
       sx={{
@@ -167,40 +230,52 @@ function HubScreen({ onSelect }: { onSelect: (w: WorkflowType) => void }) {
           maxWidth: 600,
         }}
       >
-        {ACTIONS.map(({ workflow, icon, label, color, border }) => (
-          <Button
-            key={workflow}
-            onClick={() => onSelect(workflow)}
-            sx={{
-              flexDirection: 'column',
-              gap: 1.5,
-              minHeight: { xs: 130, sm: 160 },
-              borderRadius: 4,
-              bgcolor: color,
-              border: `2px solid ${border}`,
-              color: '#fff',
-              fontSize: { xs: 18, sm: 22 },
-              fontWeight: 700,
-              letterSpacing: 1,
-              textTransform: 'none',
-              boxShadow: `0 4px 20px ${border}33`,
-              transition: 'all 0.2s',
-              '&:hover': {
-                bgcolor: color.replace('0.35', '0.55'),
-                transform: 'scale(1.03)',
-                boxShadow: `0 8px 28px ${border}55`,
-              },
-              '&:active': { transform: 'scale(0.97)' },
-            }}
-          >
-            <Typography sx={{ fontSize: { xs: 44, sm: 52 }, lineHeight: 1 }}>{icon}</Typography>
-            {label}
-          </Button>
-        ))}
+        {ACTIONS.map(({ workflow, icon, label, color, border }) => {
+          const badgeCount = workflow === 'PICKING' ? pickingBadge : 0;
+          return (
+            <Badge
+              key={workflow}
+              badgeContent={badgeCount > 0 ? badgeCount : undefined}
+              color={badgeCount > 0 ? 'error' : 'default'}
+              sx={{ '& .MuiBadge-badge': { fontSize: 14, fontWeight: 900, minWidth: 22, height: 22 } }}
+            >
+              <Button
+                onClick={() => onSelect(workflow)}
+                sx={{
+                  flexDirection: 'column',
+                  gap: 1.5,
+                  minHeight: { xs: 130, sm: 160 },
+                  width: '100%',
+                  borderRadius: 4,
+                  bgcolor: color,
+                  border: `2px solid ${badgeCount > 0 && workflow === 'PICKING' ? '#ff1744' : border}`,
+                  color: '#fff',
+                  fontSize: { xs: 18, sm: 22 },
+                  fontWeight: 700,
+                  letterSpacing: 1,
+                  textTransform: 'none',
+                  boxShadow: badgeCount > 0 && workflow === 'PICKING'
+                    ? '0 4px 20px #ff174466'
+                    : `0 4px 20px ${border}33`,
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    bgcolor: color.replace('0.35', '0.55'),
+                    transform: 'scale(1.03)',
+                    boxShadow: `0 8px 28px ${border}55`,
+                  },
+                  '&:active': { transform: 'scale(0.97)' },
+                }}
+              >
+                <Typography sx={{ fontSize: { xs: 44, sm: 52 }, lineHeight: 1 }}>{icon}</Typography>
+                {label}
+              </Button>
+            </Badge>
+          );
+        })}
       </Box>
 
       <Typography sx={{ color: '#333', fontSize: 12, textAlign: 'center', mt: 2 }}>
-        WMS NK · Operator Mode · v2
+        WMS NK · Mod Operator · v2
       </Typography>
     </Box>
   );

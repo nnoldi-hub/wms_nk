@@ -20,6 +20,8 @@ app.use(helmet());
 app.use(cors());
 app.use(express.json());
 
+const jwt = require('jsonwebtoken');
+
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'ok', 
@@ -27,6 +29,46 @@ app.get('/health', (req, res) => {
     connections: io.engine.clientsCount,
     timestamp: new Date().toISOString() 
   });
+});
+
+/**
+ * GET /operators/presence
+ * Returnează lista operatorilor conectați la acest moment.
+ * Necesită JWT valid (role manager sau admin).
+ */
+app.get('/operators/presence', (req, res) => {
+  const auth = req.headers.authorization || '';
+  const token = auth.startsWith('Bearer ') ? auth.slice(7) : null;
+  if (!token) return res.status(401).json({ success: false, message: 'Autentificare necesară' });
+
+  let caller;
+  try {
+    caller = jwt.verify(token, process.env.JWT_SECRET);
+  } catch {
+    return res.status(401).json({ success: false, message: 'Token invalid' });
+  }
+  if (!['manager', 'admin'].includes(caller.role)) {
+    return res.status(403).json({ success: false, message: 'Acces interzis' });
+  }
+
+  // Colectăm socket-urile conectate din room-ul role:operator
+  const operatorRoom = io.sockets.adapter.rooms.get('role:operator') || new Set();
+  const operators = [];
+
+  for (const socketId of operatorRoom) {
+    const socket = io.sockets.sockets.get(socketId);
+    if (socket) {
+      operators.push({
+        socketId,
+        userId: socket.userId,
+        username: socket.username,
+        role: socket.role,
+        status: 'ONLINE',
+      });
+    }
+  }
+
+  return res.json({ success: true, data: operators, total: operators.length });
 });
 
 setupWebSocket(io);

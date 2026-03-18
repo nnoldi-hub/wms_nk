@@ -11,10 +11,13 @@ router.post('/orders/:id/allocate', PickingController.allocateFromOrder);
 
 // Pick jobs CRUD-ish
 router.get('/pick-jobs', PickingController.listJobs);
+router.get('/pick-jobs/unassigned', PickingController.listJobs); // alias cu ?status=NEW
 router.get('/pick-jobs/:id', PickingController.getJob);
 router.get('/pick-jobs/:id/labels.pdf', PickingController.labelsPdf);
 router.get('/pick-jobs/:id/labels-reserved.pdf', PickingController.labelsReservedPdf);
 router.post('/pick-jobs/:id/accept', PickingController.acceptJob);
+// Manager asignează explicit un job unui operator (cu notificare WebSocket)
+router.post('/pick-jobs/:id/assign', PickingController.assignJob);
 // Supervisor: reassign job to another worker
 router.post('/pick-jobs/:id/reassign', PickingController.reassignJob);
 // Per-item accept/release for multi-picker

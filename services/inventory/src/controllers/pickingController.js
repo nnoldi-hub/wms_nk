@@ -1,6 +1,7 @@
 // Picking workflow controller
 const PDFDocument = require('pdfkit');
 const QRCode = require('qrcode');
+const { publish } = require('../utils/rabbitmqPublisher');
 
 // URL intern Docker pentru warehouse-config (picking engine)
 const WAREHOUSE_CONFIG_URL = process.env.WAREHOUSE_CONFIG_URL || 'http://wms-warehouse-config:3000';
@@ -621,6 +622,69 @@ module.exports = {
       return res.json({ success: true, data: rows.rows, pagination: { page: Number(page), limit: Number(limit), total: total.rows[0].c } });
     } catch (e) {
       return res.status(500).json({ success: false, message: e.message });
+    }
+  },
+
+  /**
+   * POST /pick-jobs/:id/assign
+   * Manager/admin asignează explicit un job unui operator.
+   * Body: { operator_id: string, priority?: 'NORMAL'|'URGENT'|'CRITIC' }
+   * Publică pick-job.assigned pe RabbitMQ → notifications-service → WebSocket operator.
+   */
+  async assignJob(req, res) {
+    const client = await req.db.connect();
+    try {
+      const { id } = req.params;
+      const { operator_id, priority = 'NORMAL' } = req.body || {};
+      if (!operator_id) return res.status(400).json({ success: false, message: 'operator_id is required' });
+      if (!['NORMAL', 'URGENT', 'CRITIC'].includes(priority)) {
+        return res.status(400).json({ success: false, message: 'priority trebuie să fie NORMAL, URGENT sau CRITIC' });
+      }
+
+      await client.query('BEGIN');
+      const j = await client.query('SELECT * FROM picking_jobs WHERE id = $1 FOR UPDATE', [id]);
+      if (j.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ success: false, message: 'Job negăsit' }); }
+      const job = j.rows[0];
+      if (['COMPLETED', 'CANCELLED'].includes(job.status)) {
+        await client.query('ROLLBACK');
+        return res.status(400).json({ success: false, message: `Nu se poate asigna un job ${job.status}` });
+      }
+
+      const upd = await client.query(
+        `UPDATE picking_jobs
+            SET assigned_to = $1,
+                assigned_at = now(),
+                priority = $2,
+                accept_deadline = now() + interval '5 minutes',
+                status = 'ASSIGNED'
+          WHERE id = $3
+          RETURNING *`,
+        [operator_id, priority, id]
+      );
+      await client.query('COMMIT');
+
+      const updatedJob = upd.rows[0];
+
+      // Publică eveniment RabbitMQ → notifications-service îl va trimite pe WebSocket
+      const itemsCount = await req.db.query(
+        'SELECT COUNT(*)::int AS c FROM picking_job_items WHERE job_id = $1', [id]
+      );
+      publish('pick-job.assigned', {
+        jobId: id,
+        operatorId: operator_id,
+        priority,
+        orderRef: updatedJob.order_ref || null,
+        itemsCount: itemsCount.rows[0].c,
+        assignedBy: getUserId(req),
+        userId: operator_id, // notifications-service folosește userId pt room user:{userId}
+      });
+
+      return res.json({ success: true, data: updatedJob });
+    } catch (e) {
+      try { await client.query('ROLLBACK'); } catch (_) {}
+      return res.status(500).json({ success: false, message: e.message });
+    } finally {
+      client.release();
     }
   },
 

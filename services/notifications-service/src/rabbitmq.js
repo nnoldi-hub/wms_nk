@@ -1,6 +1,31 @@
 const amqp = require('amqplib');
 const logger = require('./utils/logger');
 
+// Hartă routing key → emitter specific
+const ROUTING_HANDLERS = {
+  'pick-job.assigned': (io, event) => {
+    const { jobId, operatorId, priority = 'NORMAL', orderRef, itemsCount, assignedBy } = event;
+    logger.info(`Job ${jobId} assigned to operator ${operatorId} (priority: ${priority})`);
+
+    // Emit dedicated event on operator's personal room
+    io.to(`user:${operatorId}`).emit('job:assigned', {
+      jobId,
+      priority,
+      orderRef,
+      itemsCount,
+      assignedBy,
+    });
+
+    // Also emit generic notification for any dashboard listeners
+    io.to(`role:manager`).emit('notification', {
+      type: 'pick-job.assigned',
+      source: 'inventory',
+      data: event,
+      timestamp: new Date().toISOString(),
+    });
+  },
+};
+
 async function setupRabbitMQ(io) {
   try {
     const connection = await amqp.connect(process.env.RABBITMQ_URL);
@@ -27,17 +52,24 @@ async function setupRabbitMQ(io) {
           
           logger.info(`Event received: ${exchange} -> ${routingKey}`);
 
-          const notification = {
-            type: routingKey,
-            source: exchange.split('.')[0],
-            data: event,
-            timestamp: new Date().toISOString()
-          };
+          // Dacă există un handler specific, îl folosim
+          const handler = ROUTING_HANDLERS[routingKey];
+          if (handler) {
+            handler(io, event);
+          } else {
+            // Fallback generic: broadcast la rol
+            const notification = {
+              type: routingKey,
+              source: exchange.split('.')[0],
+              data: event,
+              timestamp: new Date().toISOString()
+            };
 
-          io.to(`role:${event.targetRole || 'all'}`).emit('notification', notification);
-          
-          if (event.userId) {
-            io.to(`user:${event.userId}`).emit('notification', notification);
+            io.to(`role:${event.targetRole || 'all'}`).emit('notification', notification);
+            
+            if (event.userId) {
+              io.to(`user:${event.userId}`).emit('notification', notification);
+            }
           }
 
           channel.ack(msg);
