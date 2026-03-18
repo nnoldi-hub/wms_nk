@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useScannerFeedback } from '../hooks/useScannerFeedback';
 import { useNotifications } from '../hooks/useNotifications';
+import { useJobSound } from '../hooks/useJobSound';
 import ReceptieWorkflow from '../components/scanner/workflows/ReceptieWorkflow';
 import PutawayWorkflow from '../components/scanner/workflows/PutawayWorkflow';
 import PickingWorkflow from '../components/scanner/workflows/PickingWorkflow';
@@ -41,20 +42,22 @@ const ACTIONS: HubAction[] = [
 export default function ScannerModePage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const { getSoundEnabled, setSoundEnabled, feedbackOK } = useScannerFeedback();
+  const { getSoundEnabled, setSoundEnabled } = useScannerFeedback();
   const [activeView, setActiveView] = useState<ActiveView>(null);
   const [soundOn, setSoundOn] = useState(getSoundEnabled());
   const { assignedJobCount, lastJobAssigned, clearLastJob } = useNotifications();
+  const { playForPriority, stopCritic } = useJobSound();
   const [showJobBanner, setShowJobBanner] = useState(false);
 
-  // Arată banner fullscreen când vine un job nou
+  // Arată banner + sunet diferentiat când vine un job nou
   useEffect(() => {
-    if (lastJobAssigned) {
+    if (lastJobAssigned && getSoundEnabled()) {
       setShowJobBanner(true);
-      // Sunet alertă job nou (dacă sunetul e pornit)
-      if (getSoundEnabled()) feedbackOK();
+      playForPriority(lastJobAssigned.priority || 'NORMAL');
+    } else if (lastJobAssigned) {
+      setShowJobBanner(true);
     }
-  }, [lastJobAssigned, getSoundEnabled, playFeedback]);
+  }, [lastJobAssigned, getSoundEnabled, playForPriority]);
 
   const handleLogout = () => {
     logout();
@@ -171,13 +174,13 @@ export default function ScannerModePage() {
             <Button
               variant="contained"
               size="large"
-              onClick={() => { setShowJobBanner(false); clearLastJob(); setActiveView('PICKING'); }}
+              onClick={() => { setShowJobBanner(false); clearLastJob(); stopCritic(); setActiveView('PICKING'); }}
               sx={{ mt: 2, bgcolor: '#fff', color: '#e65100', fontWeight: 900, fontSize: 18, px: 5, py: 1.5 }}
             >
               ACCEPTĂ
             </Button>
             <Button
-              onClick={() => { setShowJobBanner(false); clearLastJob(); }}
+              onClick={() => { setShowJobBanner(false); clearLastJob(); stopCritic(); }}
               sx={{ color: 'rgba(255,255,255,0.7)', fontSize: 14 }}
             >
               Ignoră momentan

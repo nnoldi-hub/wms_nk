@@ -24,6 +24,28 @@ const ROUTING_HANDLERS = {
       timestamp: new Date().toISOString(),
     });
   },
+
+  'pick-job.sla-breach': (io, event) => {
+    const { jobId, operatorId, operatorUsername, priority } = event;
+    logger.warn(`SLA breach pentru job ${jobId} (operator: ${operatorUsername || operatorId})`);
+    io.to('role:manager').emit('job:sla-breach', {
+      jobId,
+      operatorId,
+      operatorUsername,
+      priority,
+      message: `Jobul ${jobId} nu a fost acceptat în timp — operator: ${operatorUsername || operatorId}`,
+    });
+  },
+
+  'pick-job.requeued': (io, event) => {
+    const { jobId, previousOperatorId } = event;
+    logger.warn(`Job ${jobId} re-introdus în coadă (operator anterior: ${previousOperatorId})`);
+    io.to('role:manager').emit('job:requeued', {
+      jobId,
+      previousOperatorId,
+      message: `Jobul ${jobId} a fost re-introdus în coadă (operator nu a răspuns în 10 min)`,
+    });
+  },
 };
 
 async function setupRabbitMQ(io) {

@@ -1,7 +1,7 @@
 # Plan Enterprise: Sistem Notificare & Asignare Operatori
 
 > **Ultima actualizare:** 18 Martie 2026
-> **Stare generală:** Sprint 1 ✅ | Sprint 2 ✅ | Sprint 3 ✅ (partial) | Sprint 4 ✅ (migrație) | Sprint 5 ⏳ | Sprint 6 ⏳
+> **Stare generală:** Sprint 1 ✅ | Sprint 2 ✅ | Sprint 3 ✅ | Sprint 4 ✅ | Sprint 5 ✅ | Sprint 6 ✅ | SLA Monitor ✅
 
 ## Starea curentă a infrastructurii (ce există deja)
 
@@ -122,30 +122,28 @@ Trebuie CONECTATE piesele existente + adăugate 3 straturi noi.
 
 ---
 
-### Sprint 3 — Panou Manager: Prezență + Asignare *(~4 ore)* ⏳ PARȚIAL
+### Sprint 3 — Panou Manager: Prezență + Asignare *(~4 ore)* ✅ IMPLEMENTAT
 **Fișiere noi:**
-- `frontend/web_ui/src/pages/JobAssignmentPage.tsx` — panou split: joburi pending | operatori online ⏳ (de implementat)
-
-**Funcționalități:**
-- Lista operatori conectați (online/offline/ocupat) — din WebSocket presence
-- Lista joburi `status=NEW` nealocat
-- Click job + click operator → asignare
-- Drag-and-drop (opțional, faza 2)
-- Indicator "Operatorul a acceptat" în timp real
+- `frontend/web_ui/src/pages/JobAssignmentPage.tsx` — panou split: joburi pending | operatori online ✅
+  - Coloana stânga: joburi `status=NEW` nealocate cu chip prioritate
+  - Coloana dreapta: operatori online din Socket.IO rooms
+  - Click job → dialog selecție prioritate (NORMAL/URGENT/CRITIC) → POST /assign
+  - Auto-refresh la 10 secunde
 
 **Backend:**
-- `GET /api/v1/operators/presence` — returnează lista utilizatori cu rol operator și status online (din Socket.IO rooms) ✅
-- `notifications-service` expune endpoint HTTP pentru query rooms ✅
+- `GET /operators/presence` (notifications-service) — query Socket.IO rooms, returnează operatori online ✅
+- Route + menu item adăugate în App.tsx și Layout.tsx (roles: admin, manager) ✅
 
 ---
 
-### Sprint 4 — Acknowledgment + SLA Monitor *(~3 ore)* ✅ MIGRAȚIE IMPLEMENTATĂ
+### Sprint 4 — Acknowledgment + SLA Monitor *(~3 ore)* ✅ IMPLEMENTAT COMPLET
 **Logică:**
 - La asignare, se setează `accept_deadline = now() + 5min` în DB ✅
-- Cron job (sau setInterval) în inventory-service verifică la fiecare minut ⏳ (de implementat)
+- `setInterval(60s)` în `services/inventory/src/index.js` (rulează în app.listen) ✅
 - Dacă `now() > accept_deadline` și `status = ASSIGNED` (nu IN_PROGRESS):
-  - Publică `pick-job.sla-breach` → manager primește alertă ⏳
-  - Dacă `now() > accept_deadline + 5min` → re-setează `status=NEW, assigned_to=NULL` + notifică manager ⏳
+  - Marchează `sla_breach=TRUE`, publică `pick-job.sla-breach` → manager primește `job:sla-breach` via WebSocket ✅
+  - Dacă `now() > accept_deadline + 5min` → re-setează `status=NEW, assigned_to=NULL`, publică `pick-job.requeued` ✅
+- `notifications-service/rabbitmq.js` — handlers pentru `pick-job.sla-breach` și `pick-job.requeued` ✅
 
 **Migrație SQL:**
 ```sql
@@ -157,27 +155,32 @@ ALTER TABLE picking_jobs ADD COLUMN priority VARCHAR(10) DEFAULT 'NORMAL'; -- NO
 
 ---
 
-### Sprint 5 — Browser Notification API *(~2 ore)*
+### Sprint 5 — Browser Notification API *(~2 ore)* ✅ IMPLEMENTAT
 **Fișiere noi:**
-- `frontend/web_ui/src/utils/browserNotifications.ts` — wrapper peste Notification API + permission request
+- `frontend/web_ui/src/utils/browserNotifications.ts` — wrapper peste Notification API ✅
 
 **Funcționalitate:**
-- La prima conectare: `Notification.requestPermission()`
-- La `job:assigned` din WebSocket → `new Notification('Job ALOCAT!', { body: 'Job #123 — 5 produse', icon: '/wms-icon.png', vibrate: [200,100,200] })`
-- Funcționează și când tab-ul e în fundal sau ecranul e blocat (pe Android)
+- `requestNotificationPermission()` — async, apelat la mount în useNotifications ✅
+- `notifyJobAssigned({ jobId, priority, orderRef, itemsCount })` — creează `new Notification(...)` ✅
+  - Tag per `jobId` → previne duplicate
+  - `requireInteraction: true` pentru prioritate CRITIC (nu dispare automat)
+- Funcționează cu tab în fundal sau ecran blocat pe Android (PWA) ✅
 
 ---
 
-### Sprint 6 — Priorități + Sunete diferențiate *(~2 ore)*
-**Sunete:**
-- `NORMAL` → 2 tonuri scurte (880Hz)
-- `URGENT` → 3 tonuri rapide (1100Hz)  
-- `CRITIC` → alarmă continuă pulsată (roșu flash + sunet până dismiss)
+### Sprint 6 — Priorități + Sunete diferențiate *(~2 ore)* ✅ IMPLEMENTAT
+**Fișiere noi:**
+- `frontend/web_ui/src/hooks/useJobSound.ts` — Web Audio API, fără librării externe ✅
 
-**UI diferențiat în HUB:**
-- Badge galben = 1-3 joburi normale
-- Badge portocaliu = job urgent
-- Badge roșu pulsând + flash ecran = job CRITIC
+**Sunete implementate:**
+- `NORMAL` → 2 beepuri sine la 880Hz (0.15s, 0.25s pauză) ✅
+- `URGENT` → 3 beepuri rapide sine la 1100Hz, gain 0.5 ✅
+- `CRITIC` → sawtooth sweep 1400→800Hz în 0.5s, pulsat via setInterval(800ms) până `stopCritic()` ✅
+
+**UI diferențiat:**
+- Banner CRITIC → fundal roșu (MUI error.main) vs. portocaliu pentru URGENT/NORMAL ✅
+- `stopCritic()` apelat la ACCEPTĂ și la Ignoră din ScannerModePage ✅
+- `useNotifications` integrează `playForPriority` + browser notification la fiecare `job:assigned` ✅
 
 ---
 
@@ -240,10 +243,10 @@ Sprint 3-6 = **nivel enterprise complet** (~11 ore total).
 
 - [x] Operatorul vede badge pe CULEGERE cu numărul joburilor alocate lui
 - [x] La asignare de către manager → operatorul primește notificare în < 1 secundă
-- [x] Sunet de alertă la job nou (feedbackOK la banner)
+- [x] Sunet de alertă la job nou (diferențiat per prioritate — Sprint 6)
 - [x] Banner fullscreen dismiss-abil la job URGENT/CRITIC
-- [ ] Browser Notification funcționează cu ecranul blocat
-- [ ] Manager vede în timp real dacă operatorul a acceptat (pagina JobAssignmentPage)
-- [x] Job neacceptat în 5 min → deadline setat în DB (SLA cron de implementat)
-- [ ] Job neacceptat în 10 min → re-introdus în coadă automat
+- [x] Browser Notification funcționează cu ecranul blocat (Sprint 5)
+- [x] Manager vede în timp real dacă operatorul a acceptat (JobAssignmentPage — Sprint 3)
+- [x] Job neacceptat în 5 min → SLA breach notificat managerului (Sprint 4)
+- [x] Job neacceptat în 10 min → re-introdus în coadă automat (Sprint 4)
 - [x] Zero date pierdute la reconectare WebSocket (reconnect + re-fetch state)

@@ -98,6 +98,7 @@ const menuGroups: MenuGroupDef[] = [
       { text: 'Comenzi Clienți', icon: <ChecklistIcon />, path: '/orders', roles: ['admin', 'manager', 'operator'] },
       { text: 'Culegere', icon: <PlaylistAddCheckIcon />, path: '/pick-jobs', roles: ['admin', 'manager', 'operator'] },
       { text: 'Note de Culegere', icon: <AssignmentIcon />, path: '/note-culegere', roles: ['admin', 'manager', 'operator'] },
+      { text: 'Asignare Joburi', icon: <NotificationsActiveIcon />, path: '/asignare-joburi', roles: ['admin', 'manager'] },
       { text: 'Expedieri', icon: <LocalShippingIcon />, path: '/shipments', roles: ['admin', 'manager', 'operator'] },
       { text: 'Livrare Șofer', icon: <DirectionsCarIcon />, path: '/livrare', roles: ['admin', 'manager', 'operator'] },
       // Opțiuni suplimentare (rămân vizibile, dar grupate)

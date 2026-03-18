@@ -47,6 +47,7 @@ import DynamicRulesPage from './pages/DynamicRulesPage';
 import ActivityLogPage from './pages/ActivityLogPage';
 import StockAlertsPage from './pages/StockAlertsPage';
 import ERPIntegrationPage from './pages/ERPIntegrationPage';
+import JobAssignmentPage from './pages/JobAssignmentPage';
 import { TutorialProvider } from './contexts/TutorialContext';
 import TutorialOverlay from './components/TutorialOverlay';
 import ScannerModePage from './pages/ScannerModePage';
@@ -478,6 +479,16 @@ function App() {
                 <ProtectedRoute roles={['admin','manager']}>
                   <Layout>
                     <ERPIntegrationPage />
+                  </Layout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/asignare-joburi"
+              element={
+                <ProtectedRoute roles={['admin','manager']}>
+                  <Layout>
+                    <JobAssignmentPage />
                   </Layout>
                 </ProtectedRoute>
               }

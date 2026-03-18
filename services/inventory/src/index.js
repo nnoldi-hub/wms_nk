@@ -225,6 +225,74 @@ if (process.env.NODE_ENV !== 'test') {
     logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     logger.info(`Health check: http://localhost:${PORT}/health`);
     logger.info(`Metrics: http://localhost:${PORT}/metrics`);
+
+    // SLA Monitor: verifică la fiecare minut joburile ASSIGNED cu deadline depășit
+    const { publish: publishEvent } = require('./utils/rabbitmqPublisher');
+    const SLA_CHECK_INTERVAL_MS = 60_000; // 1 minut
+    const SLA_BREACH_MINUTES = 5;
+    const SLA_REQUEUE_MINUTES = 10;
+
+    setInterval(async () => {
+      try {
+        // Joburi cu deadline depășit (5 min) — alertă manager
+        const breached = await pool.query(`
+          SELECT pj.id, pj.assigned_to, pj.accept_deadline, pj.priority,
+                 u.username AS operator_username
+            FROM picking_jobs pj
+            LEFT JOIN users u ON pj.assigned_to::text = u.id::text
+           WHERE pj.status = 'ASSIGNED'
+             AND pj.accepted_at IS NULL
+             AND pj.accept_deadline < now()
+             AND pj.sla_breach = FALSE
+        `);
+
+        for (const job of breached.rows) {
+          // Marchează sla_breach = true
+          await pool.query(
+            'UPDATE picking_jobs SET sla_breach = TRUE WHERE id = $1',
+            [job.id]
+          );
+          // Notifică manageri
+          publishEvent('pick-job.sla-breach', {
+            jobId: job.id,
+            operatorId: job.assigned_to,
+            operatorUsername: job.operator_username,
+            priority: job.priority || 'NORMAL',
+            targetRole: 'manager',
+          });
+          logger.warn(`[SLA] Job ${job.id} a depășit deadline-ul de accept (operator: ${job.operator_username || job.assigned_to})`);
+        }
+
+        // Joburi cu SLA depășit de > 10 min → re-coadă
+        const requeue = await pool.query(`
+          SELECT id, assigned_to FROM picking_jobs
+           WHERE status = 'ASSIGNED'
+             AND accepted_at IS NULL
+             AND accept_deadline < now() - interval '${SLA_REQUEUE_MINUTES - SLA_BREACH_MINUTES} minutes'
+             AND sla_breach = TRUE
+        `);
+
+        for (const job of requeue.rows) {
+          await pool.query(
+            `UPDATE picking_jobs
+                SET status = 'NEW', assigned_to = NULL, assigned_at = NULL,
+                    accept_deadline = NULL, sla_breach = FALSE
+              WHERE id = $1`,
+            [job.id]
+          );
+          publishEvent('pick-job.requeued', {
+            jobId: job.id,
+            previousOperatorId: job.assigned_to,
+            targetRole: 'manager',
+          });
+          logger.warn(`[SLA] Job ${job.id} re-introdus în coadă (operator ${job.assigned_to} nu a acceptat în ${SLA_REQUEUE_MINUTES} min)`);
+        }
+      } catch (err) {
+        logger.error('[SLA Monitor] Eroare:', err.message);
+      }
+    }, SLA_CHECK_INTERVAL_MS);
+
+    logger.info('SLA Monitor pornit (interval: 1 minut)');
   });
 }
 

@@ -3,10 +3,16 @@
  *
  * Conectează autentificat cu JWT, ascultă evenimentele de job asignat,
  * returnează contorul de joburi neasigurate + ultimul job primit.
+ * Integrează sunete diferențiate per prioritate + Browser Notification API.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { io, Socket } from 'socket.io-client';
+import { useJobSound } from './useJobSound';
+import {
+  requestNotificationPermission,
+  notifyJobAssigned,
+} from '../utils/browserNotifications';
 
 export interface JobAssignedEvent {
   jobId: string;
@@ -31,8 +37,14 @@ export function useNotifications(): UseNotificationsResult {
   const [connected, setConnected] = useState(false);
   const [assignedJobCount, setAssignedJobCount] = useState(0);
   const [lastJobAssigned, setLastJobAssigned] = useState<JobAssignedEvent | null>(null);
+  const { playForPriority } = useJobSound();
 
   const clearLastJob = useCallback(() => setLastJobAssigned(null), []);
+
+  // Solicită permisiune notificări browser la montare
+  useEffect(() => {
+    requestNotificationPermission().catch(() => {/* silent */});
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('accessToken');
@@ -53,6 +65,15 @@ export function useNotifications(): UseNotificationsResult {
     socket.on('job:assigned', (event: JobAssignedEvent) => {
       setAssignedJobCount((c) => c + 1);
       setLastJobAssigned(event);
+      // Sunet diferențiat per prioritate
+      playForPriority(event.priority || 'NORMAL');
+      // Browser Notification (funcționează cu ecranul blocat pe Android)
+      notifyJobAssigned({
+        jobId: event.jobId,
+        priority: event.priority || 'NORMAL',
+        orderRef: event.orderRef,
+        itemsCount: event.itemsCount,
+      });
     });
 
     // La reconectare: re-solicită contorul actual din server via REST
@@ -76,6 +97,7 @@ export function useNotifications(): UseNotificationsResult {
       socket.disconnect();
       socketRef.current = null;
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return { connected, assignedJobCount, lastJobAssigned, clearLastJob };
